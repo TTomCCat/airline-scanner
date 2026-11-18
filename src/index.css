@@ -76,6 +76,9 @@ button.link { border: none; background: none; color: var(--brand); padding: 10px
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
 }
 
+.version { text-align: center; font-size: 0.75rem; color: var(--muted); padding: 24px 0 8px; }
+.version a { color: inherit; }
+
 .usb-ready {
   margin: 12px 0 0; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem;
   background: color-mix(in srgb, var(--brand) 10%, transparent); color: var(--brand);

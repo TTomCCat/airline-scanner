@@ -79,6 +79,35 @@ export default function App() {
         )}
         {tab === 'saved' && <TicketList />}
       </main>
+      <VersionFooter />
     </div>
+  );
+}
+
+const REPO_URL = 'https://github.com/sontung606/airline-scanner';
+
+function VersionFooter() {
+  const v = __APP_VERSION__; // injected at build time (vite.config.js)
+  const built = new Date(v.builtAt).toLocaleString(undefined, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+  return (
+    <footer className="version">
+      v{v.version}
+      {' · '}
+      {v.commit !== 'unknown' ? (
+        <a href={`${REPO_URL}/commit/${v.commit}`} target="_blank" rel="noopener noreferrer">
+          {v.commit}
+        </a>
+      ) : (
+        'unknown commit'
+      )}
+      {' · '}
+      {v.dev ? 'local dev' : `built ${built}`}
+    </footer>
   );
 }
