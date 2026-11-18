@@ -76,6 +76,11 @@ button.link { border: none; background: none; color: var(--brand); padding: 10px
   box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.3);
 }
 
+.usb-ready {
+  margin: 12px 0 0; padding: 8px 12px; border-radius: 8px; font-size: 0.85rem;
+  background: color-mix(in srgb, var(--brand) 10%, transparent); color: var(--brand);
+}
+
 .cam-controls { display: flex; align-items: center; gap: 12px; margin-top: 10px; flex-wrap: wrap; }
 .cam-controls label { flex: 1; min-width: 180px; font-size: 0.85rem; color: var(--muted); }
 .cam-controls input[type='range'] { padding: 0; margin: 4px 0 0; accent-color: var(--brand); }

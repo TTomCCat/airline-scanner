@@ -168,6 +168,7 @@ export default function Scanner({ onText }) {
         </button>
       </div>
 
+      <p className="usb-ready">🔫 USB barcode scanner ready — just scan, no need to click anything.</p>
       <p className="muted small">Tip: copy a ticket image and press Ctrl+V (⌘V on Mac) anywhere here.</p>
       {message && <p className="muted">{message}</p>}
 
@@ -177,6 +178,14 @@ export default function Scanner({ onText }) {
           rows={3}
           value={pasted}
           onChange={(e) => setPasted(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter submits (a USB scanner typing here ends with Enter); Shift+Enter = new line
+            if (e.key === 'Enter' && !e.shiftKey && pasted.trim()) {
+              e.preventDefault();
+              onText(pasted);
+              setPasted('');
+            }
+          }}
           placeholder="M1DOE/JOHN MR         EABC123 SGNKULMH 0759 322Y026D0010 100"
         />
         <button disabled={!pasted.trim()} onClick={() => onText(pasted)}>
