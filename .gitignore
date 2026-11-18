@@ -1,0 +1,5 @@
+node_modules
+dist
+*.local
+# real ticket photos (contain booking reference)
+src/assets/sample-tickets/
