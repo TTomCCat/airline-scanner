@@ -84,7 +84,7 @@ export default function App() {
   );
 }
 
-const REPO_URL = 'https://github.com/sontung606/airline-scanner';
+const REPO_URL = 'https://github.com/TTomCCat/airline-scanner';
 
 function VersionFooter() {
   const v = __APP_VERSION__; // injected at build time (vite.config.js)
