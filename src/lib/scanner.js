@@ -149,6 +149,7 @@ export async function decodeImageFile(file) {
   }
 
   const bitmap = await loadBitmap(file);
+  const { width, height } = bitmap;
   try {
     // 2. Resized versions with different binarizers
     for (const size of [2000, 3000, 1400, 1000]) {
@@ -173,6 +174,12 @@ export async function decodeImageFile(file) {
   // Found some barcode, but not a boarding pass — let the app show its text
   if (lastSeen || fallback) return lastSeen || fallback;
 
+  if (Math.max(width, height) < 500) {
+    throw new Error(
+      `This image is too small to read (${width}×${height} px) — it looks like a thumbnail. ` +
+        'Open the image full size before copying, or upload the original photo.',
+    );
+  }
   throw new Error(
     'No barcode found in this photo. Try a closer, sharper, well-lit photo of the barcode (fill the frame, avoid glare).',
   );
