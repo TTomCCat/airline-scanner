@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { startCamera, decodeImageFile } from '../lib/scanner.js';
 
 export default function Scanner({ onText }) {
@@ -36,20 +36,63 @@ export default function Scanner({ onText }) {
     };
   }, [cameraOn, onText]);
 
+  const decodeFile = useCallback(
+    async (file, source = 'photo') => {
+      setBusy(true);
+      setMessage(`Reading barcode from ${source}…`);
+      try {
+        const text = await decodeImageFile(file);
+        setMessage('');
+        onText(text);
+      } catch (err) {
+        setMessage(err.message);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onText],
+  );
+
   async function handleFile(e) {
     const file = e.target.files?.[0];
     e.target.value = '';
-    if (!file) return;
-    setBusy(true);
-    setMessage('Reading barcode from photo…');
+    if (file) decodeFile(file);
+  }
+
+  // Ctrl+V / ⌘V anywhere on the page with an image in the clipboard
+  useEffect(() => {
+    function onPaste(e) {
+      const item = [...(e.clipboardData?.items || [])].find((i) => i.type.startsWith('image/'));
+      if (!item) return; // plain text: let the textarea handle it normally
+      e.preventDefault();
+      const file = item.getAsFile();
+      if (file) decodeFile(file, 'pasted image');
+    }
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [decodeFile]);
+
+  // "Paste image" button — reads the clipboard via the async Clipboard API
+  async function pasteFromButton() {
+    if (!navigator.clipboard?.read) {
+      setMessage('Your browser can’t read the clipboard from a button. Press Ctrl+V (⌘V on Mac) instead.');
+      return;
+    }
     try {
-      const text = await decodeImageFile(file);
-      setMessage('');
-      onText(text);
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (type) {
+          decodeFile(await item.getType(type), 'pasted image');
+          return;
+        }
+      }
+      setMessage('No image in the clipboard. Copy an image (or take a screenshot) first.');
     } catch (err) {
-      setMessage(err.message);
-    } finally {
-      setBusy(false);
+      setMessage(
+        err.name === 'NotAllowedError'
+          ? 'Clipboard access was blocked. Allow it, or press Ctrl+V (⌘V on Mac) instead.'
+          : `Could not read clipboard: ${err.message}`,
+      );
     }
   }
 
@@ -76,8 +119,12 @@ export default function Scanner({ onText }) {
           🖼 Upload photo
           <input type="file" accept="image/*" hidden disabled={busy} onChange={handleFile} />
         </label>
+        <button disabled={busy} onClick={pasteFromButton}>
+          📋 Paste image
+        </button>
       </div>
 
+      <p className="muted small">Tip: copy a ticket image and press Ctrl+V (⌘V on Mac) anywhere here.</p>
       {message && <p className="muted">{message}</p>}
 
       <details className="paste">
