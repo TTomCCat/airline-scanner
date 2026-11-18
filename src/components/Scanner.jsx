@@ -7,20 +7,30 @@ export default function Scanner({ onText }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [pasted, setPasted] = useState('');
+  const [cam, setCam] = useState(null); // camera controls: zoom / torch
+  const [zoom, setZoom] = useState(null);
+  const [torchOn, setTorchOn] = useState(false);
 
   useEffect(() => {
     if (!cameraOn) return;
     let controls;
     let cancelled = false;
-    setMessage('Point the camera at the barcode…');
-    startCamera(videoRef.current, (text) => {
-      setCameraOn(false);
-      setMessage('');
-      onText(text);
-    })
+    setMessage('Starting camera…');
+    startCamera(
+      videoRef.current,
+      (text) => {
+        setCameraOn(false);
+        setMessage('');
+        onText(text);
+      },
+      setMessage,
+    )
       .then((c) => {
-        if (cancelled) c.stop();
-        else controls = c;
+        if (cancelled) return c.stop();
+        controls = c;
+        setCam(c);
+        setZoom(c.zoom?.value ?? null);
+        setTorchOn(false);
       })
       .catch((e) => {
         setCameraOn(false);
@@ -33,6 +43,7 @@ export default function Scanner({ onText }) {
     return () => {
       cancelled = true;
       controls?.stop();
+      setCam(null);
     };
   }, [cameraOn, onText]);
 
@@ -104,6 +115,39 @@ export default function Scanner({ onText }) {
         <div className="video-wrap">
           <video ref={videoRef} muted playsInline />
           <div className="aim" />
+        </div>
+      )}
+
+      {cameraOn && cam && (cam.zoom || cam.torch) && (
+        <div className="cam-controls">
+          {cam.zoom && (
+            <label>
+              🔍 Zoom {zoom?.toFixed(1)}×
+              <input
+                type="range"
+                min={cam.zoom.min}
+                max={cam.zoom.max}
+                step={cam.zoom.step}
+                value={zoom ?? cam.zoom.value}
+                onChange={(e) => {
+                  const v = Number(e.target.value);
+                  setZoom(v);
+                  cam.setZoom(v);
+                }}
+              />
+            </label>
+          )}
+          {cam.torch && (
+            <button
+              className={torchOn ? 'primary' : ''}
+              onClick={() => {
+                cam.setTorch(!torchOn);
+                setTorchOn(!torchOn);
+              }}
+            >
+              🔦 {torchOn ? 'Light on' : 'Light'}
+            </button>
+          )}
         </div>
       )}
 

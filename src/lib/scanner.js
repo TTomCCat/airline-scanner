@@ -44,26 +44,78 @@ async function readText(input, extra = {}) {
 
 // ---------- Camera ----------
 
+// Centre "aim box" — must match .aim in index.css (inset: 30% 8%)
+const AIM = { x: 0.08, y: 0.3, w: 0.84, h: 0.4 };
+
+async function openCamera() {
+  const base = { facingMode: { ideal: 'environment' } };
+  // Ask for 4K first (more pixels per barcode bar), fall back to 1080p / anything
+  for (const size of [
+    { width: { ideal: 3840 }, height: { ideal: 2160 } },
+    { width: { ideal: 1920 }, height: { ideal: 1080 } },
+    {},
+  ]) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: false, video: { ...base, ...size } });
+    } catch (e) {
+      if (e.name === 'NotAllowedError') throw e;
+    }
+  }
+  throw new Error('No camera available');
+}
+
 /**
- * Start the back camera and call onText(text) once a barcode is read.
- * Returns { stop() }.
+ * Start the back camera and call onText(text) once a boarding pass barcode is read.
+ * onStatus(msg) gets live hints. Returns { stop, zoom, torch, setZoom, setTorch }.
  */
-export async function startCamera(videoEl, onText) {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: false,
-    video: {
-      facingMode: { ideal: 'environment' },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-    },
-  });
+export async function startCamera(videoEl, onText, onStatus = () => {}) {
+  const stream = await openCamera();
+  const track = stream.getVideoTracks()[0];
   videoEl.srcObject = stream;
   await videoEl.play();
 
+  // ---- Auto-adjust camera: continuous focus, a bit of zoom ----
+  const caps = track.getCapabilities?.() || {};
+  const advanced = [];
+  if (caps.focusMode?.includes('continuous')) advanced.push({ focusMode: 'continuous' });
+  if (caps.exposureMode?.includes('continuous')) advanced.push({ exposureMode: 'continuous' });
+  let zoom = null;
+  if (caps.zoom && caps.zoom.max > caps.zoom.min) {
+    const value = Math.min(caps.zoom.max, Math.max(caps.zoom.min, 2));
+    zoom = { min: caps.zoom.min, max: Math.min(caps.zoom.max, 8), step: caps.zoom.step || 0.1, value };
+    advanced.push({ zoom: value });
+  }
+  for (const c of advanced) {
+    try {
+      await track.applyConstraints({ advanced: [c] });
+    } catch {
+      // not supported on this device — ignore
+    }
+  }
+
+  const setZoom = async (value) => {
+    try {
+      await track.applyConstraints({ advanced: [{ zoom: value }] });
+    } catch {
+      // ignore
+    }
+  };
+  const torch = Boolean(caps.torch);
+  const setTorch = async (on) => {
+    try {
+      await track.applyConstraints({ advanced: [{ torch: on }] });
+    } catch {
+      // ignore
+    }
+  };
+
+  // ---- Decode loop ----
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   let stopped = false;
   let timer;
+  let frame = 0;
+  let lastHint = '';
 
   const stop = () => {
     stopped = true;
@@ -72,30 +124,48 @@ export async function startCamera(videoEl, onText) {
     videoEl.srcObject = null;
   };
 
+  const hint = (msg) => {
+    if (msg !== lastHint) onStatus((lastHint = msg));
+  };
+
   const tick = async () => {
     if (stopped) return;
-    const w = videoEl.videoWidth;
-    const h = videoEl.videoHeight;
-    if (w && h) {
-      canvas.width = w;
-      canvas.height = h;
-      ctx.drawImage(videoEl, 0, 0, w, h);
+    const vw = videoEl.videoWidth;
+    const vh = videoEl.videoHeight;
+    if (vw && vh) {
+      // Alternate: centre box at full resolution, then the whole frame
+      const r = frame++ % 2 === 0 ? AIM : { x: 0, y: 0, w: 1, h: 1 };
+      const sx = Math.round(r.x * vw);
+      const sy = Math.round(r.y * vh);
+      const sw = Math.round(r.w * vw);
+      const sh = Math.round(r.h * vh);
+      canvas.width = sw;
+      canvas.height = sh;
+      ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, sw, sh);
       try {
-        const text = await readText(ctx.getImageData(0, 0, w, h), { tryInvert: false });
-        if (text && !stopped) {
+        const results = await readBarcodes(ctx.getImageData(0, 0, sw, sh), {
+          ...BASE_OPTIONS,
+          tryInvert: false,
+          returnErrors: true,
+        });
+        const good = results.find((x) => x.isValid && looksLikeBoardingPass(x.text));
+        if (good && !stopped) {
           stop();
-          onText(text);
+          onText(good.text);
           return;
         }
+        if (results.some((x) => x.isValid)) hint('That barcode is not a boarding pass.');
+        else if (results.length) hint('Barcode seen — move closer and hold steady…');
+        else hint('Point the camera at the barcode…');
       } catch {
         // keep trying
       }
     }
-    timer = setTimeout(tick, 150);
+    timer = setTimeout(tick, 100);
   };
   tick();
 
-  return { stop };
+  return { stop, zoom, torch, setZoom, setTorch };
 }
 
 // ---------- Photo ----------
