@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Camera, CameraOff, ClipboardPaste, Flashlight, ImageUp, ScanBarcode, ZoomIn } from 'lucide-react';
 import { startCamera, decodeImageFile } from '../lib/scanner.js';
+import { useT } from '../lib/i18n.js';
 
 export default function Scanner({ onText }) {
+  const { t } = useT();
   const videoRef = useRef(null);
   const [cameraOn, setCameraOn] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -15,7 +18,7 @@ export default function Scanner({ onText }) {
     if (!cameraOn) return;
     let controls;
     let cancelled = false;
-    setMessage('Starting camera…');
+    setMessage(t('startingCamera'));
     startCamera(
       videoRef.current,
       (text) => {
@@ -36,8 +39,8 @@ export default function Scanner({ onText }) {
         setCameraOn(false);
         setMessage(
           window.isSecureContext
-            ? `Camera error: ${e.message}`
-            : 'Camera needs HTTPS (or localhost). Use "Upload photo" instead.',
+            ? t('cameraError', { msg: e.message })
+            : t('cameraNeedsHttps'),
         );
       });
     return () => {
@@ -48,9 +51,9 @@ export default function Scanner({ onText }) {
   }, [cameraOn, onText]);
 
   const decodeFile = useCallback(
-    async (file, source = 'photo') => {
+    async (file, source = t('sourcePhoto')) => {
       setBusy(true);
-      setMessage(`Reading barcode from ${source}…`);
+      setMessage(t('readingFrom', { source }));
       try {
         const text = await decodeImageFile(file);
         setMessage('');
@@ -77,7 +80,7 @@ export default function Scanner({ onText }) {
       if (!item) return; // plain text: let the textarea handle it normally
       e.preventDefault();
       const file = item.getAsFile();
-      if (file) decodeFile(file, 'pasted image');
+      if (file) decodeFile(file, t('sourcePasted'));
     }
     window.addEventListener('paste', onPaste);
     return () => window.removeEventListener('paste', onPaste);
@@ -86,30 +89,30 @@ export default function Scanner({ onText }) {
   // "Paste image" button — reads the clipboard via the async Clipboard API
   async function pasteFromButton() {
     if (!navigator.clipboard?.read) {
-      setMessage('Your browser can’t read the clipboard from a button. Press Ctrl+V (⌘V on Mac) instead.');
+      setMessage(t('clipNoButton'));
       return;
     }
     try {
       for (const item of await navigator.clipboard.read()) {
         const type = item.types.find((t) => t.startsWith('image/'));
         if (type) {
-          decodeFile(await item.getType(type), 'pasted image');
+          decodeFile(await item.getType(type), t('sourcePasted'));
           return;
         }
       }
-      setMessage('No image in the clipboard. Copy an image (or take a screenshot) first.');
+      setMessage(t('clipNoImage'));
     } catch (err) {
       setMessage(
         err.name === 'NotAllowedError'
-          ? 'Clipboard access was blocked. Allow it, or press Ctrl+V (⌘V on Mac) instead.'
-          : `Could not read clipboard: ${err.message}`,
+          ? t('clipBlocked')
+          : t('clipError', { msg: err.message }),
       );
     }
   }
 
   return (
     <section className="card">
-      <h2>Scan a boarding pass</h2>
+      <h2>{t('scanTitle')}</h2>
 
       {cameraOn && (
         <div className="video-wrap">
@@ -122,7 +125,9 @@ export default function Scanner({ onText }) {
         <div className="cam-controls">
           {cam.zoom && (
             <label>
-              🔍 Zoom {zoom?.toFixed(1)}×
+              <span className="with-icon">
+                <ZoomIn size={14} /> Zoom {zoom?.toFixed(1)}×
+              </span>
               <input
                 type="range"
                 min={cam.zoom.min}
@@ -145,7 +150,7 @@ export default function Scanner({ onText }) {
                 setTorchOn(!torchOn);
               }}
             >
-              🔦 {torchOn ? 'Light on' : 'Light'}
+              <Flashlight size={16} /> {torchOn ? t('torchOn') : t('torch')}
             </button>
           )}
         </div>
@@ -153,27 +158,31 @@ export default function Scanner({ onText }) {
 
       <div className="actions">
         {cameraOn ? (
-          <button onClick={() => setCameraOn(false)}>Stop camera</button>
+          <button onClick={() => setCameraOn(false)}>
+            <CameraOff size={16} /> {t('stopCamera')}
+          </button>
         ) : (
           <button className="primary" onClick={() => setCameraOn(true)}>
-            📷 Use camera
+            <Camera size={16} /> {t('useCamera')}
           </button>
         )}
         <label className={`button ${busy ? 'disabled' : ''}`}>
-          🖼 Upload photo
+          <ImageUp size={16} /> {t('uploadPhoto')}
           <input type="file" accept="image/*" hidden disabled={busy} onChange={handleFile} />
         </label>
         <button disabled={busy} onClick={pasteFromButton}>
-          📋 Paste image
+          <ClipboardPaste size={16} /> {t('pasteImage')}
         </button>
       </div>
 
-      <p className="usb-ready">🔫 USB barcode scanner ready — just scan, no need to click anything.</p>
-      <p className="muted small">Tip: copy a ticket image and press Ctrl+V (⌘V on Mac) anywhere here.</p>
+      <p className="usb-ready">
+        <ScanBarcode size={16} /> {t('usbReady')}
+      </p>
+      <p className="muted small">{t('pasteTip')}</p>
       {message && <p className="muted">{message}</p>}
 
       <details className="paste">
-        <summary>Paste barcode text</summary>
+        <summary>{t('pasteText')}</summary>
         <textarea
           rows={3}
           value={pasted}
@@ -189,7 +198,7 @@ export default function Scanner({ onText }) {
           placeholder="M1DOE/JOHN MR         EABC123 SGNKULMH 0759 322Y026D0010 100"
         />
         <button disabled={!pasted.trim()} onClick={() => onText(pasted)}>
-          Read text
+          {t('readText')}
         </button>
       </details>
     </section>

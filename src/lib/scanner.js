@@ -3,6 +3,7 @@
 // on phone photos than the pure-JS port. ZXing-js is kept as a last fallback.
 import { prepareZXingModule, readBarcodes } from 'zxing-wasm/reader';
 import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url';
+import { t } from './i18n.js';
 
 // Serve the .wasm file from our own build instead of a CDN
 prepareZXingModule({
@@ -61,7 +62,7 @@ async function openCamera() {
       if (e.name === 'NotAllowedError') throw e;
     }
   }
-  throw new Error('No camera available');
+  throw new Error(t('noCamera'));
 }
 
 /**
@@ -154,9 +155,9 @@ export async function startCamera(videoEl, onText, onStatus = () => {}) {
           onText(good.text);
           return;
         }
-        if (results.some((x) => x.isValid)) hint('That barcode is not a boarding pass.');
-        else if (results.length) hint('Barcode seen — move closer and hold steady…');
-        else hint('Point the camera at the barcode…');
+        if (results.some((x) => x.isValid)) hint(t('hintNotBoarding'));
+        else if (results.length) hint(t('hintSeen'));
+        else hint(t('hintPoint'));
       } catch {
         // keep trying
       }
@@ -246,12 +247,11 @@ export async function decodeImageFile(file) {
 
   if (Math.max(width, height) < 500) {
     throw new Error(
-      `This image is too small to read (${width}×${height} px) — it looks like a thumbnail. ` +
-        'Open the image full size before copying, or upload the original photo.',
+      t('imageTooSmall', { w: width, h: height }),
     );
   }
   throw new Error(
-    'No barcode found in this photo. Try a closer, sharper, well-lit photo of the barcode (fill the frame, avoid glare).',
+    t('noBarcode'),
   );
 }
 

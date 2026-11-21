@@ -15,30 +15,82 @@ export function ticketId(t) {
   return [t.carrier, t.flightNo, t.flightDate, t.seat, t.lastName].join('|');
 }
 
-/** Save or update a ticket. Returns true if it already existed. */
+/** Tickets with the same flight number on the same day belong to one group. */
+export function flightKey(t) {
+  return `${t.flight || ''}|${t.flightDate || ''}`;
+}
+
+/** Normalise older records (saved before `savedAt` / `note` existed). */
+function normalise(t) {
+  return {
+    ...t,
+    savedAt: t.savedAt ?? t.createdAt ?? t.updatedAt ?? 0,
+    note: t.note ?? t.notes ?? '',
+  };
+}
+
+/**
+ * Save or update a ticket. Returns true if it already existed.
+ * Re-scanning keeps the original saved time and only updates the data / note.
+ */
 export async function saveTicket(ticket) {
   const d = await db();
   const id = ticketId(ticket);
   const existing = await d.get('tickets', id);
+  const now = Date.now();
+  const savedAt = existing?.savedAt ?? existing?.createdAt ?? now;
+  const keptEdits = Object.fromEntries((existing?.editedFields || []).map((k) => [k, existing[k]]));
   await d.put('tickets', {
     ...existing,
     ...ticket,
+    ...keptEdits, // hand-corrected name / seat survive a re-scan
     id,
-    createdAt: existing?.createdAt ?? Date.now(),
-    updatedAt: Date.now(),
+    note: ticket.note || existing?.note || existing?.notes || '', // an empty note never wipes an old one
+    savedAt,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
   });
   return Boolean(existing);
 }
 
-/** All tickets: upcoming flights first (soonest first), then past ones (latest first). */
 export async function listTickets() {
-  const all = await (await db()).getAll('tickets');
-  const today = new Date().toISOString().slice(0, 10);
-  const upcoming = all.filter((t) => t.flightDate >= today).sort((a, b) => a.flightDate.localeCompare(b.flightDate));
-  const past = all.filter((t) => !(t.flightDate >= today)).sort((a, b) => (b.flightDate || '').localeCompare(a.flightDate || ''));
-  return [...upcoming, ...past];
+  return (await (await db()).getAll('tickets')).map(normalise);
+}
+
+/** Edit fields of a saved ticket (e.g. note, name, seat). The id and saved time stay the same. */
+export async function updateTicket(id, patch) {
+  const tx = (await db()).transaction('tickets', 'readwrite');
+  const current = await tx.store.get(id);
+  if (!current) throw new Error('Ticket not found');
+  // Remember which fields were corrected by hand so a re-scan of the same pass keeps them
+  const edited = [...new Set([...(current.editedFields || []), ...Object.keys(patch).filter((k) => k !== 'note' && patch[k] !== current[k])])];
+  await tx.store.put({
+    ...current,
+    ...patch,
+    id,
+    editedFields: edited,
+    savedAt: current.savedAt ?? current.createdAt,
+    updatedAt: Date.now(),
+  });
+  await tx.done;
 }
 
 export async function deleteTicket(id) {
   await (await db()).delete('tickets', id);
+}
+
+/** Delete several tickets in one transaction. */
+export async function deleteTickets(ids) {
+  const tx = (await db()).transaction('tickets', 'readwrite');
+  await Promise.all([...ids.map((id) => tx.store.delete(id)), tx.done]);
+}
+
+/** Delete every ticket of one flight (flight number + date). */
+export async function deleteFlight(key) {
+  const all = await listTickets();
+  await deleteTickets(all.filter((t) => flightKey(t) === key).map((t) => t.id));
+}
+
+export async function clearAll() {
+  await (await db()).clear('tickets');
 }

@@ -1,9 +1,11 @@
 // Shared display of one flight leg as a boarding-pass style card.
+import { Plane } from 'lucide-react';
+import { useT, locale } from '../lib/i18n.js';
 
 function formatDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 function Field({ label, value, big }) {
@@ -16,36 +18,40 @@ function Field({ label, value, big }) {
   );
 }
 
-export default function TicketFields({ t }) {
-  const ff = t.frequentFlyerNumber ? `${t.frequentFlyerAirline || ''} ${t.frequentFlyerNumber}`.trim() : '';
+/** `ticket` is one leg of a parsed boarding pass (or a saved ticket). */
+export default function TicketFields({ ticket: tk }) {
+  const { t } = useT();
+  const ff = tk.frequentFlyerNumber ? `${tk.frequentFlyerAirline || ''} ${tk.frequentFlyerNumber}`.trim() : '';
   return (
     <div className="ticket">
       <div className="route">
         <div>
-          <div className="code">{t.from}</div>
-          <div className="city">{t.fromCity}</div>
+          <div className="code">{tk.from}</div>
+          <div className="city">{tk.fromCity}</div>
         </div>
-        <div className="plane">✈</div>
+        <div className="plane">
+          <Plane size={22} strokeWidth={1.75} />
+        </div>
         <div className="right">
-          <div className="code">{t.to}</div>
-          <div className="city">{t.toCity}</div>
+          <div className="code">{tk.to}</div>
+          <div className="city">{tk.toCity}</div>
         </div>
       </div>
       <div className="grid">
-        <Field label="Passenger" value={t.name} big />
-        <Field label="Flight" value={t.flight} big />
-        <Field label="Date" value={formatDate(t.flightDate)} />
-        <Field label="Seat" value={t.seat} big />
-        <Field label="Class" value={t.cabinName ? `${t.cabinName} (${t.cabin})` : t.cabin} />
-        <Field label="Booking ref (PNR)" value={t.pnr} />
-        <Field label="Sequence" value={t.sequence} />
-        <Field label="Gate" value={t.gate} />
-        <Field label="Boarding" value={t.boardingTime} />
-        <Field label="Ticket no." value={t.ticketNumber} />
-        <Field label="Frequent flyer" value={ff} />
-        <Field label="Baggage" value={t.freeBaggage} />
+        <Field label={t('fPassenger')} value={tk.name} big />
+        <Field label={t('fFlight')} value={tk.flight} big />
+        <Field label={t('fDate')} value={formatDate(tk.flightDate)} />
+        <Field label={t('fSeat')} value={tk.seat} big />
+        <Field label={t('fClass')} value={tk.cabinName ? `${tk.cabinName} (${tk.cabin})` : tk.cabin} />
+        <Field label={t('fPnr')} value={tk.pnr} />
+        <Field label={t('fSequence')} value={tk.sequence} />
+        <Field label={t('fGate')} value={tk.gate} />
+        <Field label={t('fBoarding')} value={tk.boardingTime} />
+        <Field label={t('fTicketNo')} value={tk.ticketNumber} />
+        <Field label={t('fFrequentFlyer')} value={ff} />
+        <Field label={t('fBaggage')} value={tk.freeBaggage} />
       </div>
-      {t.notes && <p className="notes">{t.notes}</p>}
+      {(tk.note || tk.notes) && <p className="notes">{tk.note || tk.notes}</p>}
     </div>
   );
 }

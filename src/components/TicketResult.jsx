@@ -1,11 +1,16 @@
 import { useState } from 'react';
+import { AlertTriangle, Save } from 'lucide-react';
 import TicketFields from './TicketFields.jsx';
 import { saveTicket } from '../lib/db.js';
+import { useT } from '../lib/i18n.js';
 
+/** Shows a scanned pass, lets the user add a note and save it without leaving the Scan tab. */
 export default function TicketResult({ parsed, onSaved, onCancel }) {
-  const [extra, setExtra] = useState({ gate: '', boardingTime: '', notes: '' });
+  const { t } = useT();
+  const [note, setNote] = useState('');
   const [showRaw, setShowRaw] = useState(false);
-  const [status, setStatus] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const passenger = {
     name: parsed.name,
@@ -13,56 +18,73 @@ export default function TicketResult({ parsed, onSaved, onCancel }) {
     firstName: parsed.firstName,
     raw: parsed.raw,
   };
-  const tickets = parsed.legs.map((leg) => ({ ...passenger, ...leg, ...extra }));
+  const tickets = parsed.legs.map((leg) => ({ ...passenger, ...leg, note: note.trim() }));
 
   async function save() {
+    if (saving) return;
+    setSaving(true);
+    setError('');
     try {
-      let updated = 0;
-      for (const t of tickets) if (await saveTicket(t)) updated++;
-      setStatus(updated ? 'Already saved — updated it.' : 'Saved!');
-      setTimeout(onSaved, 600);
+      let existed = false;
+      for (const tk of tickets) if (await saveTicket(tk)) existed = true;
+      onSaved({ tickets, existed });
     } catch (e) {
-      setStatus(`Could not save: ${e.message}`);
+      setError(t('saveFailed', { msg: e.message }));
+      setSaving(false);
     }
   }
 
-  const set = (k) => (e) => setExtra({ ...extra, [k]: e.target.value });
-
   return (
     <section className="card">
-      <h2>Boarding pass info</h2>
-      {tickets.map((t, i) => (
-        <TicketFields key={i} t={t} />
+      <h2>{t('passengerInfo')}</h2>
+      {tickets.map((tk, i) => (
+        <TicketFields key={i} ticket={{ ...tk, note: '' }} />
       ))}
 
-      {parsed.warnings.length > 0 && <p className="muted">⚠ {parsed.warnings.join(', ')}</p>}
+      {parsed.warnings.length > 0 && (
+        <p className="muted with-icon">
+          <AlertTriangle size={14} /> {parsed.warnings.join(', ')}
+        </p>
+      )}
 
-      <p className="muted small">Not in the barcode — add from the paper ticket if you want:</p>
-      <div className="inputs">
-        <label>
-          Gate
-          <input value={extra.gate} onChange={set('gate')} placeholder="26" />
-        </label>
-        <label>
-          Boarding time
-          <input type="time" value={extra.boardingTime} onChange={set('boardingTime')} />
-        </label>
-        <label className="wide">
-          Notes
-          <input value={extra.notes} onChange={set('notes')} placeholder="Lounge, etc." />
-        </label>
-      </div>
+      <label className="note-label">
+        {t('noteLabel')}
+        <textarea
+          rows={2}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          onKeyDown={(e) => {
+            // Enter saves; Shift+Enter = new line
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              save();
+            }
+          }}
+          placeholder={t('notePlaceholder')}
+          disabled={saving}
+        />
+      </label>
 
       <div className="actions">
-        <button className="primary" onClick={save}>
-          💾 Save ticket
+        <button className="primary" onClick={save} disabled={saving}>
+          {saving ? (
+            <>
+              <span className="spinner" aria-hidden="true" /> {t('saving')}
+            </>
+          ) : (
+            <>
+              <Save size={16} /> {t('save')}
+            </>
+          )}
         </button>
-        <button onClick={onCancel}>Scan another</button>
+        <button onClick={onCancel} disabled={saving}>
+          {t('cancelScan')}
+        </button>
         <button className="link" onClick={() => setShowRaw(!showRaw)}>
-          {showRaw ? 'Hide' : 'Show'} raw barcode
+          {showRaw ? t('hideRaw') : t('showRaw')}
         </button>
       </div>
-      {status && <p className="status">{status}</p>}
+      {error && <p className="status error-text">{error}</p>}
       {showRaw && <pre className="raw">{parsed.raw}</pre>}
     </section>
   );
