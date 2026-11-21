@@ -227,3 +227,5 @@ svg.lucide { flex-shrink: 0; }
 .pax-edit .inputs { margin-bottom: 4px; }
 .pax-edit textarea { font-family: inherit; font-size: 1rem; resize: vertical; }
 .pax-detail .actions { margin-top: 8px; }
+.account-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; }
+.account-who { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }

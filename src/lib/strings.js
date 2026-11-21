@@ -148,6 +148,14 @@ export const STRINGS = {
     gTo: 'Đến',
     gName: 'Tên khách',
     gSeat: 'Ghế',
+    gSignIn: 'Đăng nhập Google',
+    gSignOut: 'Đăng xuất',
+    gSignedIn: 'Đã đăng nhập · {email}',
+    gSignedOut: 'Đã đăng xuất Google',
+    gAccount: 'Tài khoản Google',
+    gNotSignedIn: 'Chưa đăng nhập — đăng nhập để tải vé lên Google Sheets',
+    gConfirmSignOut: 'Đăng xuất {email}?',
+    gNeedDrive: 'Cần cho phép quyền Google Drive để tạo và cập nhật bảng tính. Hãy đăng nhập lại và đánh dấu quyền này.',
   },
 
   en: {
@@ -294,5 +302,13 @@ export const STRINGS = {
     gTo: 'To',
     gName: 'Passenger',
     gSeat: 'Seat',
+    gSignIn: 'Sign in with Google',
+    gSignOut: 'Sign out',
+    gSignedIn: 'Signed in · {email}',
+    gSignedOut: 'Signed out of Google',
+    gAccount: 'Google account',
+    gNotSignedIn: 'Not signed in — sign in to upload tickets to Google Sheets',
+    gConfirmSignOut: 'Sign out {email}?',
+    gNeedDrive: 'Google Drive access is needed to create and update the sheet. Sign in again and tick that permission.',
   },
 };

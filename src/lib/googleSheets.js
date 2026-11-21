@@ -3,12 +3,14 @@
 // the app can only touch the spreadsheet it created, so Google review is not needed.
 // Rows are matched by ticket id (last column), so re-uploading updates instead of duplicating.
 
+import { useSyncExternalStore } from 'react';
 import { sheetName, formatSavedAt } from './exportXlsx.js';
 import { t } from './i18n.js';
 
 // OAuth Client IDs are public (Google sends them to every browser); VITE_GOOGLE_CLIENT_ID can override this one.
 export const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '45070709097-cdoubncdc977lvbnkanjujmbvt67go70.apps.googleusercontent.com';
-const SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const SCOPE = `openid email ${DRIVE_SCOPE}`;
 const GIS_SRC = 'https://accounts.google.com/gsi/client';
 const API = 'https://sheets.googleapis.com/v4/spreadsheets';
 const SHEET_KEY = 'gsheetId';
@@ -85,25 +87,75 @@ export function planUpload(groups, existing = new Map()) {
   return { data, added, updated };
 }
 
-// ---------- stored spreadsheet id ----------
+// ---------- account + stored spreadsheet id ----------
+// The signed-in account (email + access token) is kept in localStorage until the token expires,
+// so a page reload doesn't sign the user out. Each account remembers its own spreadsheet.
 
-export function getSheetId() {
+const AUTH_KEY = 'gauth';
+const sheetKey = (email) => (email ? `${SHEET_KEY}:${email}` : SHEET_KEY);
+
+function readJson(key) {
   try {
-    return localStorage.getItem(SHEET_KEY) || '';
+    return JSON.parse(localStorage.getItem(key) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function write(key, value) {
+  try {
+    value == null ? localStorage.removeItem(key) : localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+  } catch {
+    /* storage blocked: works for this page only */
+  }
+}
+
+let auth = readJson(AUTH_KEY); // { token, expiresAt, email } | null
+const hasToken = () => Boolean(auth?.token && Date.now() < auth.expiresAt);
+
+export function getSheetId(email = auth?.email) {
+  try {
+    const own = localStorage.getItem(sheetKey(email));
+    if (own || !email) return own || '';
+    // Sheet created before accounts were tracked: adopt it for the first account that signs in
+    const legacy = localStorage.getItem(SHEET_KEY);
+    if (legacy) {
+      localStorage.setItem(sheetKey(email), legacy);
+      localStorage.removeItem(SHEET_KEY);
+    }
+    return legacy || '';
   } catch {
     return '';
   }
 }
 
 function setSheetId(id) {
-  try {
-    id ? localStorage.setItem(SHEET_KEY, id) : localStorage.removeItem(SHEET_KEY);
-  } catch {
-    /* storage blocked: a new sheet will be created next time */
-  }
+  write(sheetKey(auth?.email), id || null);
+  notify();
 }
 
 export const sheetUrl = (id = getSheetId()) => (id ? `https://docs.google.com/spreadsheets/d/${id}/edit` : '');
+
+// Snapshot for React (stable object until something changes)
+const listeners = new Set();
+let snapshot;
+function buildSnapshot() {
+  snapshot = { email: auth?.email || '', signedIn: Boolean(auth?.email), sheetUrl: auth?.email ? sheetUrl() : '' };
+}
+function notify() {
+  buildSnapshot();
+  listeners.forEach((l) => l());
+}
+buildSnapshot();
+
+/** { email, signedIn, sheetUrl }, re-rendering when the account or its sheet changes. */
+export function useGoogleAccount() {
+  return useSyncExternalStore(
+    (fn) => (listeners.add(fn), () => listeners.delete(fn)),
+    () => snapshot,
+    () => snapshot,
+  );
+}
 
 // ---------- Google sign-in ----------
 
@@ -126,26 +178,54 @@ export function loadGis() {
   return gisPromise;
 }
 
-let token = null; // { value, expiresAt }
 let tokenClient;
 
-function requestToken() {
+/** Open Google's popup. `chooseAccount` shows the account picker; otherwise the known account is reused. */
+function requestToken(chooseAccount) {
   return new Promise((resolve, reject) => {
-    tokenClient ??= window.google.accounts.oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPE, callback: () => {} });
+    const oauth2 = window.google.accounts.oauth2;
+    tokenClient ??= oauth2.initTokenClient({ client_id: CLIENT_ID, scope: SCOPE, callback: () => {} });
     tokenClient.callback = (resp) => {
       if (resp.error) return reject(new Error(resp.error_description || resp.error));
-      token = { value: resp.access_token, expiresAt: Date.now() + (Number(resp.expires_in) - 60) * 1000 };
-      resolve(token.value);
+      if (!oauth2.hasGrantedAllScopes(resp, DRIVE_SCOPE)) return reject(new Error(t('gNeedDrive')));
+      resolve({ token: resp.access_token, expiresAt: Date.now() + (Number(resp.expires_in) - 60) * 1000 });
     };
     tokenClient.error_callback = (err) => reject(new Error(err?.type === 'popup_closed' ? t('gSignInCancelled') : err?.message || t('gSignInFailed')));
-    tokenClient.requestAccessToken({ prompt: '' });
+    tokenClient.requestAccessToken(chooseAccount || !auth?.email ? { prompt: 'select_account' } : { prompt: '', login_hint: auth.email });
   });
 }
 
-async function getToken() {
-  if (token && Date.now() < token.expiresAt) return token.value;
+async function fetchEmail(accessToken) {
+  const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) throw new Error(t('gSignInFailed'));
+  return (await res.json()).email || '';
+}
+
+async function signInWith(chooseAccount) {
   await loadGis();
-  return requestToken();
+  const got = await requestToken(chooseAccount);
+  const email = await fetchEmail(got.token);
+  auth = { ...got, email };
+  write(AUTH_KEY, auth);
+  notify();
+  return got.token;
+}
+
+/** Sign in from a button (always lets the user pick the account). */
+export const signIn = () => signInWith(true).then(() => auth.email);
+
+/** Sign out: revoke the token at Google and forget the account on this device (its sheet link is kept for next time). */
+export function signOut() {
+  const old = auth?.token;
+  auth = null;
+  write(AUTH_KEY, null);
+  notify();
+  if (old && window.google?.accounts?.oauth2) window.google.accounts.oauth2.revoke(old, () => {});
+}
+
+async function getToken() {
+  if (hasToken()) return auth.token;
+  return signInWith(false);
 }
 
 // ---------- Sheets API ----------
@@ -164,7 +244,10 @@ async function api(path, { method = 'GET', body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   if (res.ok) return res.json();
-  if (res.status === 401) token = null; // expired / revoked: next click signs in again
+  if (res.status === 401 && auth) {
+    auth = { ...auth, token: '', expiresAt: 0 }; // expired / revoked: next upload asks Google again
+    write(AUTH_KEY, auth);
+  }
   let msg = res.statusText;
   try {
     msg = (await res.json()).error?.message || msg;
@@ -203,6 +286,7 @@ export async function uploadToSheets(groups) {
   const titles = [...new Set(groups.map(tabFor))];
   const existing = new Map();
 
+  await getToken(); // sign in first, so we know which account's sheet to use
   let id = getSheetId();
   let present = id ? await tabTitles(id) : null;
   if (!present) {

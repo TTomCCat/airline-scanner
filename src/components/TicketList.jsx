@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, CloudUpload, ExternalLink, FileSpreadsheet, ListFilter, NotebookPen, Pencil, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, CloudUpload, FileSpreadsheet, ListFilter, NotebookPen, Pencil, Trash2, X } from 'lucide-react';
 import { listTickets, deleteTicket, deleteTickets, deleteFlight, clearAll, flightKey, updateTicket } from '../lib/db.js';
 import { groupByFlight, filterTickets, hasFilters, EMPTY_FILTERS } from '../lib/groups.js';
 import { exportFlight, exportAll } from '../lib/exportXlsx.js';
-import { isConfigured as sheetsConfigured, loadGis, uploadToSheets, sheetUrl } from '../lib/googleSheets.js';
+import { isConfigured as sheetsConfigured, loadGis, uploadToSheets } from '../lib/googleSheets.js';
+import GoogleAccountBar from './GoogleAccountBar.jsx';
 import { useT } from '../lib/i18n.js';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -108,7 +109,6 @@ export default function TicketList({ onToast = () => {} }) {
   const [collapsed, setCollapsed] = useState(() => new Set()); // collapsed flight keys
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [sheetLink, setSheetLink] = useState(() => sheetUrl());
 
   async function load() {
     try {
@@ -194,8 +194,7 @@ export default function TicketList({ onToast = () => {} }) {
   async function uploadEverything() {
     setUploading(true);
     await run(async () => {
-      const { added, updated, url } = await uploadToSheets(groups);
-      setSheetLink(url);
+      const { added, updated } = await uploadToSheets(groups);
       onToast({ text: t('gUploaded', { added, updated }), kind: 'ok' });
     });
     setUploading(false);
@@ -266,6 +265,8 @@ export default function TicketList({ onToast = () => {} }) {
         )}
       </div>
 
+      {sheetsConfigured() && <GoogleAccountBar busy={busy} onToast={onToast} />}
+
       <div className="list-bar">
         <span className="muted small">
           {filtering ? t('nOfTotal', { n: shown.length, total: tickets.length }) : t('nTickets', { n: tickets.length })} ·{' '}
@@ -280,11 +281,6 @@ export default function TicketList({ onToast = () => {} }) {
               {uploading ? <span className="spinner" aria-hidden="true" /> : <CloudUpload size={16} />}{' '}
               {uploading ? t('gUploading') : filtering ? t('gUploadFiltered') : t('gUpload')}
             </button>
-          )}
-          {sheetsConfigured() && sheetLink && (
-            <a className="button small-btn" href={sheetLink} target="_blank" rel="noopener noreferrer">
-              <ExternalLink size={16} /> {t('gOpenSheet')}
-            </a>
           )}
           <button className="danger small-btn" disabled={busy || !shown.length} onClick={removeAll}>
             <Trash2 size={16} /> {filtering ? t('deleteFiltered') : t('deleteAll')}
