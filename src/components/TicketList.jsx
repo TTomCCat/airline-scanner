@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, FileSpreadsheet, ListFilter, NotebookPen, Pencil, Trash2, X } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, CloudUpload, ExternalLink, FileSpreadsheet, ListFilter, NotebookPen, Pencil, Trash2, X } from 'lucide-react';
 import { listTickets, deleteTicket, deleteTickets, deleteFlight, clearAll, flightKey, updateTicket } from '../lib/db.js';
 import { groupByFlight, filterTickets, hasFilters, EMPTY_FILTERS } from '../lib/groups.js';
 import { exportFlight, exportAll } from '../lib/exportXlsx.js';
+import { isConfigured as sheetsConfigured, loadGis, uploadToSheets, sheetUrl } from '../lib/googleSheets.js';
 import { useT } from '../lib/i18n.js';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -106,6 +107,8 @@ export default function TicketList({ onToast = () => {} }) {
   const [open, setOpen] = useState(null); // expanded ticket id
   const [collapsed, setCollapsed] = useState(() => new Set()); // collapsed flight keys
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [sheetLink, setSheetLink] = useState(() => sheetUrl());
 
   async function load() {
     try {
@@ -118,6 +121,8 @@ export default function TicketList({ onToast = () => {} }) {
 
   useEffect(() => {
     load();
+    // Load Google Sign-In early so the sign-in popup opens directly from the button tap
+    if (sheetsConfigured()) loadGis().catch(() => {});
   }, []);
 
   const filtering = hasFilters(filters);
@@ -183,6 +188,17 @@ export default function TicketList({ onToast = () => {} }) {
   /** Everything currently shown (all tickets, or the filtered ones) → one file, one sheet per flight. */
   function exportEverything() {
     run(() => exportAll(groups), t('exportedAll', { n: shown.length, flights: groups.length }));
+  }
+
+  /** Everything currently shown → the user's Google Sheet (one tab per flight, rows matched by ticket id). */
+  async function uploadEverything() {
+    setUploading(true);
+    await run(async () => {
+      const { added, updated, url } = await uploadToSheets(groups);
+      setSheetLink(url);
+      onToast({ text: t('gUploaded', { added, updated }), kind: 'ok' });
+    });
+    setUploading(false);
   }
 
   function toggleGroup(key) {
@@ -259,6 +275,17 @@ export default function TicketList({ onToast = () => {} }) {
           <button className="small-btn" disabled={busy || !shown.length} onClick={exportEverything}>
             <FileSpreadsheet size={16} /> {filtering ? t('exportFiltered') : t('exportAll')}
           </button>
+          {sheetsConfigured() && (
+            <button className="small-btn" disabled={busy || !shown.length} onClick={uploadEverything}>
+              {uploading ? <span className="spinner" aria-hidden="true" /> : <CloudUpload size={16} />}{' '}
+              {uploading ? t('gUploading') : filtering ? t('gUploadFiltered') : t('gUpload')}
+            </button>
+          )}
+          {sheetsConfigured() && sheetLink && (
+            <a className="button small-btn" href={sheetLink} target="_blank" rel="noopener noreferrer">
+              <ExternalLink size={16} /> {t('gOpenSheet')}
+            </a>
+          )}
           <button className="danger small-btn" disabled={busy || !shown.length} onClick={removeAll}>
             <Trash2 size={16} /> {filtering ? t('deleteFiltered') : t('deleteAll')}
           </button>
