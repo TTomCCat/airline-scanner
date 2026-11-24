@@ -68,8 +68,13 @@ async function openCamera() {
 /**
  * Start the back camera and call onText(text) once a boarding pass barcode is read.
  * onStatus(msg) gets live hints. Returns { stop, zoom, torch, setZoom, setTorch }.
+ * With `continuous`, the camera keeps running after a read: the same pass is ignored
+ * until another pass is read or REPEAT_MS has passed, and reading pauses briefly after each hit.
  */
-export async function startCamera(videoEl, onText, onStatus = () => {}) {
+const REPEAT_MS = 4000;
+const PAUSE_AFTER_HIT_MS = 1200;
+
+export async function startCamera(videoEl, onText, onStatus = () => {}, { continuous = false } = {}) {
   const stream = await openCamera();
   const track = stream.getVideoTracks()[0];
   videoEl.srcObject = stream;
@@ -117,6 +122,8 @@ export async function startCamera(videoEl, onText, onStatus = () => {}) {
   let timer;
   let frame = 0;
   let lastHint = '';
+  let lastText = '';
+  let lastAt = 0;
 
   const stop = () => {
     stopped = true;
@@ -151,9 +158,20 @@ export async function startCamera(videoEl, onText, onStatus = () => {}) {
         });
         const good = results.find((x) => x.isValid && looksLikeBoardingPass(x.text));
         if (good && !stopped) {
-          stop();
-          onText(good.text);
-          return;
+          if (!continuous) {
+            stop();
+            onText(good.text);
+            return;
+          }
+          const now = Date.now();
+          if (good.text !== lastText || now - lastAt > REPEAT_MS) {
+            lastText = good.text;
+            lastAt = now;
+            onText(good.text);
+            timer = setTimeout(tick, PAUSE_AFTER_HIT_MS);
+            return;
+          }
+          lastAt = now; // same pass still in view — keep ignoring it
         }
         if (results.some((x) => x.isValid)) hint(t('hintNotBoarding'));
         else if (results.length) hint(t('hintSeen'));

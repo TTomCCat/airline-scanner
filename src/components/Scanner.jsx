@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, CameraOff, ClipboardPaste, Flashlight, ImageUp, ScanBarcode, ZoomIn } from 'lucide-react';
+import { Camera, CameraOff, ClipboardPaste, Flashlight, ImageUp, Repeat, ScanBarcode, Volume2, ZoomIn } from 'lucide-react';
 import { startCamera, decodeImageFile } from '../lib/scanner.js';
 import { useT } from '../lib/i18n.js';
+import { useSetting } from '../lib/settings.js';
 
 export default function Scanner({ onText }) {
   const { t } = useT();
@@ -13,6 +14,12 @@ export default function Scanner({ onText }) {
   const [cam, setCam] = useState(null); // camera controls: zoom / torch
   const [zoom, setZoom] = useState(null);
   const [torchOn, setTorchOn] = useState(false);
+  const [hit, setHit] = useState(0); // bumps on each camera read → green flash on the aim box
+  const [keepScanning, setKeepScanning] = useSetting('keepScanning');
+  const [sound, setSound] = useSetting('sound');
+  // The parent re-renders on every save; keep the camera running instead of restarting it
+  const onTextRef = useRef(onText);
+  onTextRef.current = onText;
 
   useEffect(() => {
     if (!cameraOn) return;
@@ -22,11 +29,13 @@ export default function Scanner({ onText }) {
     startCamera(
       videoRef.current,
       (text) => {
-        setCameraOn(false);
+        if (!keepScanning) setCameraOn(false);
         setMessage('');
-        onText(text);
+        setHit((n) => n + 1);
+        onTextRef.current(text);
       },
       setMessage,
+      { continuous: keepScanning },
     )
       .then((c) => {
         if (cancelled) return c.stop();
@@ -48,7 +57,7 @@ export default function Scanner({ onText }) {
       controls?.stop();
       setCam(null);
     };
-  }, [cameraOn, onText]);
+  }, [cameraOn, keepScanning]);
 
   const decodeFile = useCallback(
     async (file, source = t('sourcePhoto')) => {
@@ -117,7 +126,7 @@ export default function Scanner({ onText }) {
       {cameraOn && (
         <div className="video-wrap">
           <video ref={videoRef} muted playsInline />
-          <div className="aim" />
+          <div key={hit} className={`aim ${hit ? 'hit' : ''}`} />
         </div>
       )}
 
@@ -174,6 +183,18 @@ export default function Scanner({ onText }) {
           <ClipboardPaste size={16} /> {t('pasteImage')}
         </button>
       </div>
+
+      <div className="scan-options">
+        <label className="switch">
+          <input type="checkbox" checked={keepScanning} onChange={(e) => setKeepScanning(e.target.checked)} />
+          <Repeat size={16} aria-hidden="true" /> {t('keepScanning')}
+        </label>
+        <label className="switch">
+          <input type="checkbox" checked={sound} onChange={(e) => setSound(e.target.checked)} />
+          <Volume2 size={16} aria-hidden="true" /> {t('sound')}
+        </label>
+      </div>
+      {keepScanning && <p className="muted small">{t('keepScanningHint')}</p>}
 
       <p className="usb-ready">
         <ScanBarcode size={16} /> {t('usbReady')}

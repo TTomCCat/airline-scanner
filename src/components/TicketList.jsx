@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, ChevronDown, ChevronUp, CloudUpload, FileSpreadsheet, ListFilter, NotebookPen, Pencil, Trash2, X } from 'lucide-react';
-import { listTickets, deleteTicket, deleteTickets, deleteFlight, clearAll, flightKey, updateTicket } from '../lib/db.js';
+import { listTickets, deleteTicket, deleteTickets, deleteFlight, clearAll, flightKey, updateTicket, restoreTickets } from '../lib/db.js';
 import { groupByFlight, filterTickets, findDuplicates, hasFilters, EMPTY_FILTERS } from '../lib/groups.js';
 import { exportFlight, exportAll } from '../lib/exportXlsx.js';
 import { isConfigured as sheetsConfigured, loadGis, uploadToSheets } from '../lib/googleSheets.js';
@@ -99,7 +99,7 @@ function PaxDetail({ tk, busy, onSave }) {
   );
 }
 
-export default function TicketList({ onToast = () => {} }) {
+export default function TicketList({ onToast = () => {}, onChanged = () => {} }) {
   const { t } = useT();
   const [tickets, setTickets] = useState(null);
   const [error, setError] = useState('');
@@ -112,7 +112,9 @@ export default function TicketList({ onToast = () => {} }) {
 
   async function load() {
     try {
-      setTickets(await listTickets());
+      const list = await listTickets();
+      setTickets(list);
+      onChanged(list);
     } catch (e) {
       setError(e.message);
       setTickets([]);
@@ -142,11 +144,12 @@ export default function TicketList({ onToast = () => {} }) {
   }, [tickets]);
   const flightOptions = useMemo(() => [...new Set((tickets || []).map((tk) => tk.flight).filter(Boolean))].sort(), [tickets]);
 
-  async function run(action, doneText) {
+  /** Run a change; `undo` (deleted records) adds an Undo button to the toast that puts them back. */
+  async function run(action, doneText, undo) {
     setBusy(true);
     try {
       await action();
-      if (doneText) onToast({ text: doneText, kind: 'ok' });
+      if (doneText) onToast({ text: doneText, kind: 'ok', action: undo?.length ? { label: t('undo'), onClick: () => restore(undo) } : undefined });
     } catch (e) {
       onToast({ text: t('errorMsg', { msg: e.message }), kind: 'err' });
     } finally {
@@ -155,25 +158,32 @@ export default function TicketList({ onToast = () => {} }) {
     }
   }
 
+  function restore(records) {
+    run(() => restoreTickets(records), t('restoredN', { n: records.length }));
+  }
+
+  // Single ticket / single flight: delete straight away, Undo in the toast.
   function removeTicket(tk) {
-    if (!confirm(t('confirmDeleteTicket', { name: tk.name || t('passenger'), seat: tk.seat || '—', flight: tk.flight }))) return;
     setOpen(null);
-    run(() => deleteTicket(tk.id), t('deletedTicket'));
+    const who = [tk.name || t('passenger'), tk.seat && t('seatN', { seat: tk.seat })].filter(Boolean).join(' · ');
+    run(() => deleteTicket(tk.id), t('deletedTicketWho', { who }), [tk]);
   }
 
   function removeFlight(g) {
-    const n = totalByFlight.get(g.key) || g.tickets.length;
-    if (!confirm(t('confirmDeleteFlight', { n, flight: g.flight, date: dmy(g.flightDate) }))) return;
-    run(() => deleteFlight(g.key), t('deletedFlight', { flight: g.flight }));
+    const records = tickets.filter((tk) => flightKey(tk) === g.key);
+    run(() => deleteFlight(g.key), t('deletedFlight', { flight: g.flight, n: records.length }), records);
   }
 
+  // Bulk delete still asks first (it's rare and big), and can also be undone.
   function removeAll() {
     if (filtering) {
       if (!confirm(t('confirmDeleteFiltered', { n: shown.length }))) return;
-      run(() => deleteTickets(shown.map((tk) => tk.id)), t('deletedN', { n: shown.length }));
+      const records = [...shown];
+      run(() => deleteTickets(records.map((tk) => tk.id)), t('deletedN', { n: records.length }), records);
     } else {
       if (!confirm(t('confirmDeleteAll', { n: tickets.length }))) return;
-      run(clearAll, t('deletedAll'));
+      const records = [...tickets];
+      run(clearAll, t('deletedAll'), records);
     }
   }
 

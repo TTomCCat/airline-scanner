@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle, Save } from 'lucide-react';
 import TicketFields from './TicketFields.jsx';
-import { listTickets, saveTicket } from '../lib/db.js';
-import { matchesFor } from '../lib/groups.js';
+import { saveTicket } from '../lib/db.js';
+import { duplicatesOf, ticketsFromParsed } from '../lib/tickets.js';
 import { useT } from '../lib/i18n.js';
 
 const pad = (n) => String(n).padStart(2, '0');
@@ -15,26 +15,15 @@ const shortTime = (ms) => {
  * Shows a scanned pass, lets the user add a note and save it without leaving the Scan tab.
  * Warns (but still saves) when the flight already has a ticket with the same seat or name.
  */
-export default function TicketResult({ parsed, onSaved, onCancel }) {
+export default function TicketResult({ parsed, saved = [], onSaved, onCancel }) {
   const { t } = useT();
   const [note, setNote] = useState('');
   const [showRaw, setShowRaw] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [saved, setSaved] = useState([]);
 
-  useEffect(() => {
-    listTickets().then(setSaved, () => setSaved([]));
-  }, []);
-
-  const passenger = {
-    name: parsed.name,
-    lastName: parsed.lastName,
-    firstName: parsed.firstName,
-    raw: parsed.raw,
-  };
-  const tickets = parsed.legs.map((leg) => ({ ...passenger, ...leg, note: note.trim() }));
-  const matches = tickets.flatMap((tk) => matchesFor(tk, saved));
+  const tickets = ticketsFromParsed(parsed, note);
+  const matches = duplicatesOf(tickets, saved);
 
   async function save() {
     if (saving) return;

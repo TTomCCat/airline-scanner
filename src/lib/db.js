@@ -80,6 +80,12 @@ export async function deleteFlight(key) {
   await deleteTickets(all.filter((t) => flightKey(t) === key).map((t) => t.id));
 }
 
+/** Put deleted tickets back exactly as they were (same id and times) — used by Undo. */
+export async function restoreTickets(tickets) {
+  const tx = (await db()).transaction('tickets', 'readwrite');
+  await Promise.all([...tickets.map((t) => tx.store.put(t)), tx.done]);
+}
+
 export async function clearAll() {
   await (await db()).clear('tickets');
 }

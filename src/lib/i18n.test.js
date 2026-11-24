@@ -14,9 +14,7 @@ describe('i18n', () => {
 
   it('fills placeholders', () => {
     setLang('en');
-    expect(t('confirmDeleteFlight', { n: 3, flight: 'VN 213', date: '22/11/2026' })).toBe(
-      'Delete all 3 tickets of flight VN 213 on 22/11/2026?',
-    );
+    expect(t('deletedFlight', { n: 3, flight: 'VN 213' })).toBe('Flight VN 213 deleted (3 tickets)');
   });
 
   it('uses English singulars for n = 1', () => {
