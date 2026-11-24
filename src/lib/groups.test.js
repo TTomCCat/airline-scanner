@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupByFlight, filterTickets, fold, EMPTY_FILTERS, hasFilters } from './groups.js';
+import { groupByFlight, filterTickets, findDuplicates, matchesFor, fold, EMPTY_FILTERS, hasFilters } from './groups.js';
 
 const at = (s) => new Date(s).getTime();
 const t = (o) => ({ flight: 'VN 213', flightDate: '2026-11-21', seat: '12A', name: 'NGUYEN VAN A', savedAt: 0, ...o });
@@ -75,5 +75,58 @@ describe('helpers', () => {
   it('hasFilters', () => {
     expect(hasFilters(EMPTY_FILTERS)).toBe(false);
     expect(hasFilters({ ...EMPTY_FILTERS, seat: '1' })).toBe(true);
+  });
+});
+
+describe('findDuplicates', () => {
+  const list = [
+    t({ id: 'a', seat: '12A', name: 'NGUYEN VAN A' }),
+    t({ id: 'b', seat: '12A', name: 'TRAN THI B' }), // same seat as a
+    t({ id: 'c', seat: '14C', name: 'Nguyễn Văn A' }), // same name as a (accents / case)
+    t({ id: 'd', seat: '20D', name: 'LE VAN D' }), // unique
+    t({ id: 'e', flightDate: '2026-11-22', seat: '12A', name: 'NGUYEN VAN A' }), // other day: not a duplicate
+    t({ id: 'f', seat: '', name: 'PHAM E' }),
+    t({ id: 'g', seat: '', name: 'HO F' }), // empty seats never match
+  ];
+  const d = findDuplicates(list);
+
+  it('flags same seat and same name on the same flight', () => {
+    expect(d.get('a')).toEqual({ seat: true, name: true });
+    expect(d.get('b')).toEqual({ seat: true, name: false });
+    expect(d.get('c')).toEqual({ seat: false, name: true });
+  });
+
+  it('ignores unique tickets, other flights and empty seats', () => {
+    expect([...d.keys()].sort()).toEqual(['a', 'b', 'c']);
+  });
+
+  it('flags an identical pass scanned twice', () => {
+    const twice = findDuplicates([t({ id: 1 }), t({ id: 2 })]);
+    expect(twice.get(1)).toEqual({ seat: true, name: true });
+    expect(twice.get(2)).toEqual({ seat: true, name: true });
+  });
+
+  it('dupOnly filter keeps only duplicates', () => {
+    expect(filterTickets(list, { ...EMPTY_FILTERS, dupOnly: true }).map((x) => x.id)).toEqual(['a', 'b', 'c']);
+  });
+});
+
+describe('matchesFor', () => {
+  const saved = [
+    t({ id: 1, seat: '12A', name: 'TRAN THI B' }),
+    t({ id: 2, seat: '3C', name: 'nguyen van a' }),
+    t({ id: 3, flight: 'VJ 120', seat: '12A', name: 'NGUYEN VAN A' }),
+  ];
+
+  it('finds saved tickets with the same seat or name on the same flight', () => {
+    const m = matchesFor(t({ seat: '12a', name: 'NGUYEN VAN A' }), saved);
+    expect(m.map((x) => [x.ticket.id, x.seat, x.name])).toEqual([
+      [1, true, false],
+      [2, false, true],
+    ]);
+  });
+
+  it('returns nothing for a new seat and name', () => {
+    expect(matchesFor(t({ seat: '30F', name: 'LE VAN C' }), saved)).toEqual([]);
   });
 });

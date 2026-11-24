@@ -229,3 +229,22 @@ svg.lucide { flex-shrink: 0; }
 .pax-detail .actions { margin-top: 8px; }
 .account-bar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; }
 .account-who { display: inline-flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+
+/* Duplicate seat / name warnings */
+:root { --warn: #b45309; }
+@media (prefers-color-scheme: dark) { :root { --warn: #f0b429; } }
+.dup-warn {
+  margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+  border: 1px solid var(--warn); color: var(--text);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+.dup-warn strong { color: var(--warn); }
+.dup-warn ul { margin: 6px 0; padding-left: 20px; }
+.pax.dup { background: color-mix(in srgb, var(--warn) 10%, transparent); box-shadow: inset 4px 0 0 var(--warn); }
+.pax.dup.open { background: color-mix(in srgb, var(--warn) 16%, transparent); }
+.dup-field { color: var(--warn); font-weight: 800; }
+.pax-name .dup-mark { color: var(--warn); vertical-align: -2px; margin-right: 4px; }
+.badge.warn { display: inline-flex; align-items: center; gap: 4px; background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.toast.warn { background: var(--warn); color: #fff; }
+.check-label { display: flex; align-items: center; gap: 8px; }
+.check-label input { width: auto; margin: 0; }

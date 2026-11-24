@@ -11,8 +11,9 @@ function db() {
   return dbPromise;
 }
 
-export function ticketId(t) {
-  return [t.carrier, t.flightNo, t.flightDate, t.seat, t.lastName].join('|');
+/** Every scan gets its own id, so the same seat / name scanned twice is kept as two tickets. */
+function newId() {
+  return globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 }
 
 /** Tickets with the same flight number on the same day belong to one group. */
@@ -30,27 +31,15 @@ function normalise(t) {
 }
 
 /**
- * Save or update a ticket. Returns true if it already existed.
- * Re-scanning keeps the original saved time and only updates the data / note.
+ * Save a scanned ticket as a new record (never merged with an earlier scan).
+ * Duplicates (same seat / name on a flight) are flagged in the UI and removed by hand.
+ * Returns the new id.
  */
 export async function saveTicket(ticket) {
-  const d = await db();
-  const id = ticketId(ticket);
-  const existing = await d.get('tickets', id);
+  const id = newId();
   const now = Date.now();
-  const savedAt = existing?.savedAt ?? existing?.createdAt ?? now;
-  const keptEdits = Object.fromEntries((existing?.editedFields || []).map((k) => [k, existing[k]]));
-  await d.put('tickets', {
-    ...existing,
-    ...ticket,
-    ...keptEdits, // hand-corrected name / seat survive a re-scan
-    id,
-    note: ticket.note || existing?.note || existing?.notes || '', // an empty note never wipes an old one
-    savedAt,
-    createdAt: existing?.createdAt ?? now,
-    updatedAt: now,
-  });
-  return Boolean(existing);
+  await (await db()).add('tickets', { ...ticket, id, note: ticket.note || '', savedAt: now, createdAt: now, updatedAt: now });
+  return id;
 }
 
 export async function listTickets() {

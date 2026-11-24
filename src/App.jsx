@@ -41,11 +41,11 @@ export default function App() {
     setError(null);
   }
 
-  function handleSaved({ tickets, existed }) {
+  function handleSaved({ tickets, dupCount }) {
     reset(); // stay on the Scan tab, ready for the next pass
     const tk = tickets[0];
     const who = [tk?.name, tk?.seat && t('seatN', { seat: tk.seat })].filter(Boolean).join(' · ');
-    setToast({ text: t(existed ? 'savedAgainToast' : 'savedToast', { who }), kind: 'ok' });
+    setToast(dupCount ? { text: t('savedDupToast', { who }), kind: 'warn' } : { text: t('savedToast', { who }), kind: 'ok' });
   }
 
   return (

@@ -1,16 +1,31 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, Save } from 'lucide-react';
 import TicketFields from './TicketFields.jsx';
-import { saveTicket } from '../lib/db.js';
+import { listTickets, saveTicket } from '../lib/db.js';
+import { matchesFor } from '../lib/groups.js';
 import { useT } from '../lib/i18n.js';
 
-/** Shows a scanned pass, lets the user add a note and save it without leaving the Scan tab. */
+const pad = (n) => String(n).padStart(2, '0');
+const shortTime = (ms) => {
+  const d = new Date(ms);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+};
+
+/**
+ * Shows a scanned pass, lets the user add a note and save it without leaving the Scan tab.
+ * Warns (but still saves) when the flight already has a ticket with the same seat or name.
+ */
 export default function TicketResult({ parsed, onSaved, onCancel }) {
   const { t } = useT();
   const [note, setNote] = useState('');
   const [showRaw, setShowRaw] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [saved, setSaved] = useState([]);
+
+  useEffect(() => {
+    listTickets().then(setSaved, () => setSaved([]));
+  }, []);
 
   const passenger = {
     name: parsed.name,
@@ -19,15 +34,15 @@ export default function TicketResult({ parsed, onSaved, onCancel }) {
     raw: parsed.raw,
   };
   const tickets = parsed.legs.map((leg) => ({ ...passenger, ...leg, note: note.trim() }));
+  const matches = tickets.flatMap((tk) => matchesFor(tk, saved));
 
   async function save() {
     if (saving) return;
     setSaving(true);
     setError('');
     try {
-      let existed = false;
-      for (const tk of tickets) if (await saveTicket(tk)) existed = true;
-      onSaved({ tickets, existed });
+      for (const tk of tickets) await saveTicket(tk);
+      onSaved({ tickets, dupCount: matches.length });
     } catch (e) {
       setError(t('saveFailed', { msg: e.message }));
       setSaving(false);
@@ -45,6 +60,22 @@ export default function TicketResult({ parsed, onSaved, onCancel }) {
         <p className="muted with-icon">
           <AlertTriangle size={14} /> {parsed.warnings.join(', ')}
         </p>
+      )}
+
+      {matches.length > 0 && (
+        <div className="dup-warn" role="alert">
+          <strong className="with-icon">
+            <AlertTriangle size={16} /> {t('dupWarnTitle')}
+          </strong>
+          <ul>
+            {matches.map(({ ticket: m, seat }) => (
+              <li key={m.id}>
+                {t(seat ? 'dupSeat' : 'dupName', { seat: m.seat || '—', name: m.name || t('passenger'), time: shortTime(m.savedAt) })}
+              </li>
+            ))}
+          </ul>
+          <span className="muted small">{t('dupSaveHint')}</span>
+        </div>
       )}
 
       <label className="note-label">

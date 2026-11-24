@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronDown, ChevronUp, CloudUpload, FileSpreadsheet, ListFilter, NotebookPen, Pencil, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronUp, CloudUpload, FileSpreadsheet, ListFilter, NotebookPen, Pencil, Trash2, X } from 'lucide-react';
 import { listTickets, deleteTicket, deleteTickets, deleteFlight, clearAll, flightKey, updateTicket } from '../lib/db.js';
-import { groupByFlight, filterTickets, hasFilters, EMPTY_FILTERS } from '../lib/groups.js';
+import { groupByFlight, filterTickets, findDuplicates, hasFilters, EMPTY_FILTERS } from '../lib/groups.js';
 import { exportFlight, exportAll } from '../lib/exportXlsx.js';
 import { isConfigured as sheetsConfigured, loadGis, uploadToSheets } from '../lib/googleSheets.js';
 import GoogleAccountBar from './GoogleAccountBar.jsx';
@@ -126,7 +126,14 @@ export default function TicketList({ onToast = () => {} }) {
   }, []);
 
   const filtering = hasFilters(filters);
-  const shown = useMemo(() => (tickets ? filterTickets(tickets, filters) : []), [tickets, filters]);
+  // Duplicates are found across ALL tickets, so a filter never hides the other half of a pair
+  const dups = useMemo(() => findDuplicates(tickets || []), [tickets]);
+  const shown = useMemo(() => (tickets ? filterTickets(tickets, filters, dups) : []), [tickets, filters, dups]);
+  const dupByFlight = useMemo(() => {
+    const m = new Map();
+    for (const tk of tickets || []) if (dups.has(tk.id)) m.set(flightKey(tk), (m.get(flightKey(tk)) || 0) + 1);
+    return m;
+  }, [tickets, dups]);
   const groups = useMemo(() => groupByFlight(shown), [shown]);
   const totalByFlight = useMemo(() => {
     const m = new Map();
@@ -261,6 +268,10 @@ export default function TicketList({ onToast = () => {} }) {
               {t('savedTo')}
               <input type="datetime-local" value={filters.savedTo} onChange={setF('savedTo')} />
             </label>
+            <label className="check-label">
+              <input type="checkbox" checked={filters.dupOnly} onChange={(e) => setFilters({ ...filters, dupOnly: e.target.checked })} />
+              {t('dupOnly')}
+            </label>
           </div>
         )}
       </div>
@@ -294,6 +305,7 @@ export default function TicketList({ onToast = () => {} }) {
         const isCollapsed = collapsed.has(g.key);
         const total = totalByFlight.get(g.key) || g.tickets.length;
         const partial = filtering && g.tickets.length !== total;
+        const nDup = dupByFlight.get(g.key) || 0;
         return (
           <div key={g.key} className={`card group ${g.flightDate < today ? 'past' : ''}`}>
             <div className="group-head">
@@ -306,6 +318,11 @@ export default function TicketList({ onToast = () => {} }) {
                   </span>
                 )}
                 <span className="badge">{partial ? `${g.tickets.length}/${total}` : t('nTickets', { n: total })}</span>
+                {nDup > 0 && (
+                  <span className="badge warn">
+                    <AlertTriangle size={12} aria-hidden="true" /> {t('nDup', { n: nDup })}
+                  </span>
+                )}
                 <span className="muted chevron">{isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}</span>
               </button>
               <div className="group-actions">
@@ -320,12 +337,18 @@ export default function TicketList({ onToast = () => {} }) {
             </div>
 
             {!isCollapsed &&
-              g.tickets.map((tk) => (
-                <div key={tk.id} className={`pax ${open === tk.id ? 'open' : ''}`}>
+              g.tickets.map((tk) => {
+                const dup = dups.get(tk.id);
+                const dupLabel = dup && [dup.seat && t('dupSeatMark'), dup.name && t('dupNameMark')].filter(Boolean).join(', ');
+                return (
+                <div key={tk.id} className={`pax ${open === tk.id ? 'open' : ''} ${dup ? 'dup' : ''}`}>
                   <div className="pax-row">
                     <button className="pax-main" onClick={() => setOpen(open === tk.id ? null : tk.id)} aria-expanded={open === tk.id}>
-                      <span className="pax-name">{tk.name || '—'}</span>
-                      <span className="pax-seat">{tk.seat || '—'}</span>
+                      <span className={`pax-name ${dup?.name ? 'dup-field' : ''}`}>
+                        {dup && <AlertTriangle size={14} className="dup-mark" aria-label={dupLabel} title={dupLabel} />}
+                        {tk.name || '—'}
+                      </span>
+                      <span className={`pax-seat ${dup?.seat ? 'dup-field' : ''}`}>{tk.seat || '—'}</span>
                       <span className="pax-time">
                         {tk.note && <NotebookPen size={14} className="note-mark" aria-label={t('hasNote')} />}
                         {shortTime(tk.savedAt)}
@@ -337,7 +360,8 @@ export default function TicketList({ onToast = () => {} }) {
                   </div>
                   {open === tk.id && <PaxDetail tk={tk} busy={busy} onSave={(patch) => saveEdit(tk, patch)} />}
                 </div>
-              ))}
+                );
+              })}
           </div>
         );
       })}

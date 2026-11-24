@@ -44,7 +44,43 @@ function flightHaystack(t) {
   return `${f}|${f.replace(/^([a-z0-9]{2})0+(?=\d)/, '$1')}`;
 }
 
-export const EMPTY_FILTERS = { flight: '', seat: '', flightDate: '', name: '', savedFrom: '', savedTo: '' };
+/**
+ * Tickets that share a seat or a name with another ticket on the same flight (number + date).
+ * Returns Map<id, { seat: boolean, name: boolean }>. Empty seat / name never match.
+ */
+export function findDuplicates(tickets) {
+  const keys = (t) => {
+    const f = flightKey(t);
+    const seat = fold(t.seat);
+    const name = fold(t.name);
+    return { seat: seat && `s|${f}|${seat}`, name: name && `n|${f}|${name}` };
+  };
+  const count = new Map();
+  for (const t of tickets) {
+    for (const k of Object.values(keys(t))) if (k) count.set(k, (count.get(k) || 0) + 1);
+  }
+  const out = new Map();
+  for (const t of tickets) {
+    const k = keys(t);
+    const seat = Boolean(k.seat) && count.get(k.seat) > 1;
+    const name = Boolean(k.name) && count.get(k.name) > 1;
+    if (seat || name) out.set(t.id, { seat, name });
+  }
+  return out;
+}
+
+/** Saved tickets on the same flight as `candidate` that share its seat or name → [{ ticket, seat, name }]. */
+export function matchesFor(candidate, tickets) {
+  const f = flightKey(candidate);
+  const seat = fold(candidate.seat);
+  const name = fold(candidate.name);
+  return tickets
+    .filter((t) => flightKey(t) === f)
+    .map((t) => ({ ticket: t, seat: Boolean(seat) && fold(t.seat) === seat, name: Boolean(name) && fold(t.name) === name }))
+    .filter((m) => m.seat || m.name);
+}
+
+export const EMPTY_FILTERS = { flight: '', seat: '', flightDate: '', name: '', savedFrom: '', savedTo: '', dupOnly: false };
 
 export function hasFilters(f) {
   return Object.values(f).some((v) => v);
@@ -55,8 +91,9 @@ export function hasFilters(f) {
  * flight / seat / name: substring, case-, accent- and space-insensitive.
  * flightDate: exact YYYY-MM-DD.
  * savedFrom / savedTo: `datetime-local` strings ("2026-11-21T08:00"), inclusive.
+ * dupOnly: keep only tickets in `dups` (from findDuplicates over all tickets).
  */
-export function filterTickets(tickets, f) {
+export function filterTickets(tickets, f, dups = findDuplicates(tickets)) {
   const flight = fold(f.flight);
   const seat = fold(f.seat);
   const name = fold(f.name);
@@ -71,6 +108,7 @@ export function filterTickets(tickets, f) {
       (!name || fold(t.name).includes(name)) &&
       (!f.flightDate || t.flightDate === f.flightDate) &&
       (from === null || t.savedAt >= from) &&
-      (to === null || t.savedAt <= to),
+      (to === null || t.savedAt <= to) &&
+      (!f.dupOnly || dups.has(t.id)),
   );
 }
