@@ -445,3 +445,13 @@ textarea { font-family: var(--font-code); font-size: 0.85rem; }
 
 .header-actions { display: flex; align-items: center; gap: 2px; }
 .menu-check { margin-left: auto; color: var(--brand); }
+
+/* Installable app: update bar + install button */
+.update-bar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0 0; padding: 10px 12px;
+  border-radius: 14px; border: 1px solid var(--brand); color: var(--text);
+  background: color-mix(in srgb, var(--brand) 12%, var(--card)); animation: toast-in 0.22s ease-out;
+}
+.update-bar > svg { color: var(--brand); }
+.update-bar > span { flex: 1; min-width: 140px; font-weight: 600; }
+.install-btn { margin-right: 4px; }

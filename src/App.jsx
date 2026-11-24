@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AlertTriangle, Languages, Moon, Plane, ScanBarcode, Sun, SunMoon, Ticket } from 'lucide-react';
+import { AlertTriangle, Download, Languages, Moon, Plane, ScanBarcode, Sun, SunMoon, Ticket } from 'lucide-react';
 import Scanner from './components/Scanner.jsx';
 import TicketResult from './components/TicketResult.jsx';
 import TicketList from './components/TicketList.jsx';
 import Toast from './components/Toast.jsx';
 import ScanFlash from './components/ScanFlash.jsx';
 import Menu from './components/Menu.jsx';
+import UpdateBar from './components/UpdateBar.jsx';
+import { promptInstall, useCanInstall } from './lib/install.js';
 import { parseBCBP } from './lib/bcbp.js';
 import { listTickets, saveTicket, flightKey } from './lib/db.js';
 import { findDuplicates } from './lib/groups.js';
@@ -30,6 +32,8 @@ export default function App() {
   const hideToast = useCallback(() => setToast(null), []);
   const [flash, setFlash] = useState(null);
   const [theme, setTheme] = useSetting('theme');
+  const canInstall = useCanInstall();
+  const offlineReady = useCallback(() => setToast({ text: t('offlineReady'), kind: 'ok' }), [t]);
   // Light / dark: 'auto' leaves it to the device (prefers-color-scheme), see index.css
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -136,6 +140,11 @@ export default function App() {
             {t('appTitle')}
           </h1>
           <div className="header-actions">
+            {canInstall && (
+              <button className="small-btn install-btn" onClick={promptInstall}>
+                <Download size={16} aria-hidden="true" /> {t('installApp')}
+              </button>
+            )}
             <Menu
               label={t('theme')}
               icon={THEME_ICONS[theme] || SunMoon}
@@ -165,6 +174,7 @@ export default function App() {
           </button>
         </nav>
       </header>
+      <UpdateBar onOfflineReady={offlineReady} />
 
       <main>
         {tab === 'scan' && (
