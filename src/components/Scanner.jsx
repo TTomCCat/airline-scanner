@@ -120,14 +120,28 @@ export default function Scanner({ onText }) {
   }
 
   return (
-    <section className="card">
-      <h2>{t('scanTitle')}</h2>
+    <section className="card scanner">
+      <h2 className="sr-only">{t('scanTitle')}</h2>
 
-      {cameraOn && (
+      {cameraOn ? (
         <div className="video-wrap">
           <video ref={videoRef} muted playsInline />
           <div key={hit} className={`aim ${hit ? 'hit' : ''}`} />
+          <button className="video-stop" onClick={() => setCameraOn(false)} aria-label={t('stopCamera')}>
+            <CameraOff size={18} /> {t('stopCamera')}
+          </button>
         </div>
+      ) : (
+        <button className="viewfinder" onClick={() => setCameraOn(true)}>
+          <span className="vf-corners" aria-hidden="true" />
+          <span className="vf-icon">
+            <Camera size={30} strokeWidth={1.75} aria-hidden="true" />
+          </span>
+          <span className="vf-title">{t('tapToScan')}</span>
+          <span className="vf-sub">
+            <ScanBarcode size={14} aria-hidden="true" /> {t('tapToScanSub')}
+          </span>
+        </button>
       )}
 
       {cameraOn && cam && (cam.zoom || cam.torch) && (
@@ -153,7 +167,7 @@ export default function Scanner({ onText }) {
           )}
           {cam.torch && (
             <button
-              className={torchOn ? 'primary' : ''}
+              className={`small-btn ${torchOn ? 'primary' : ''}`}
               onClick={() => {
                 cam.setTorch(!torchOn);
                 setTorchOn(!torchOn);
@@ -165,21 +179,14 @@ export default function Scanner({ onText }) {
         </div>
       )}
 
-      <div className="actions">
-        {cameraOn ? (
-          <button onClick={() => setCameraOn(false)}>
-            <CameraOff size={16} /> {t('stopCamera')}
-          </button>
-        ) : (
-          <button className="primary" onClick={() => setCameraOn(true)}>
-            <Camera size={16} /> {t('useCamera')}
-          </button>
-        )}
-        <label className={`button ${busy ? 'disabled' : ''}`}>
+      {message && <p className="scan-message">{message}</p>}
+
+      <div className="secondary-actions">
+        <label className={`button small-btn ${busy ? 'disabled' : ''}`}>
           <ImageUp size={16} /> {t('uploadPhoto')}
           <input type="file" accept="image/*" hidden disabled={busy} onChange={handleFile} />
         </label>
-        <button disabled={busy} onClick={pasteFromButton}>
+        <button className="small-btn" disabled={busy} onClick={pasteFromButton} title={t('pasteTip')}>
           <ClipboardPaste size={16} /> {t('pasteImage')}
         </button>
       </div>
@@ -195,12 +202,6 @@ export default function Scanner({ onText }) {
         </label>
       </div>
       {keepScanning && <p className="muted small">{t('keepScanningHint')}</p>}
-
-      <p className="usb-ready">
-        <ScanBarcode size={16} /> {t('usbReady')}
-      </p>
-      <p className="muted small">{t('pasteTip')}</p>
-      {message && <p className="muted">{message}</p>}
 
       <details className="paste">
         <summary>{t('pasteText')}</summary>

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Plane } from 'lucide-react';
+import { AlertTriangle, Check, Languages, Plane, ScanBarcode, Ticket } from 'lucide-react';
 import Scanner from './components/Scanner.jsx';
 import TicketResult from './components/TicketResult.jsx';
 import TicketList from './components/TicketList.jsx';
 import Toast from './components/Toast.jsx';
+import ScanFlash from './components/ScanFlash.jsx';
+import Menu from './components/Menu.jsx';
 import { parseBCBP } from './lib/bcbp.js';
 import { listTickets, saveTicket, flightKey } from './lib/db.js';
 import { findDuplicates } from './lib/groups.js';
@@ -26,6 +28,9 @@ export default function App() {
   const savedRef = useRef(saved);
   savedRef.current = saved;
   const hideToast = useCallback(() => setToast(null), []);
+  const [flash, setFlash] = useState(null);
+  const hideFlash = useCallback(() => setFlash(null), []);
+  const showFlash = (f) => setFlash({ ...f, id: Date.now() });
 
   const reload = useCallback(async () => {
     try {
@@ -46,10 +51,7 @@ export default function App() {
   }
 
   /** "Keep scanning" mode: save straight away, no review screen. */
-  async function autoSave(pass) {
-    const tickets = ticketsFromParsed(pass);
-    const dupCount = duplicatesOf(tickets, savedRef.current).length;
-    scanFeedback(dupCount ? 'warn' : 'ok');
+  async function autoSave(tickets, dupCount) {
     try {
       for (const tk of tickets) await saveTicket(tk);
       const list = await reload();
@@ -67,6 +69,7 @@ export default function App() {
     // Vietnamese input method changed what a USB scanner typed — even if it still parses.
     if (/[^\x00-\x7F]/.test(text)) {
       scanFeedback('err');
+      showFlash({ kind: 'err', text: t('flashKeyboard') });
       setParsed(null);
       setError({ key: 'imeChanged', raw: text });
       return;
@@ -76,18 +79,26 @@ export default function App() {
       pass = parseBCBP(text);
     } catch (e) {
       scanFeedback('err');
+      showFlash({ kind: 'err', text: t('flashUnreadable') });
       setParsed(null);
       setError({ key: 'parseFailed', msg: e.message, raw: text });
       return;
     }
     setError(null);
+    const tickets = ticketsFromParsed(pass);
+    const dupCount = duplicatesOf(tickets, savedRef.current).length;
+    scanFeedback(dupCount ? 'warn' : 'ok');
+    showFlash({
+      kind: dupCount ? 'warn' : 'ok',
+      seat: tickets.map((tk) => tk.seat).filter(Boolean).join(' · '),
+      name: pass.name,
+      text: dupCount ? t('flashDuplicate') : tickets.map((tk) => tk.flight).filter(Boolean).join(' · '),
+    });
     if (getSetting('keepScanning')) {
       setParsed(null);
-      autoSave(pass);
+      autoSave(tickets, dupCount);
       return;
     }
-    const dup = duplicatesOf(ticketsFromParsed(pass), savedRef.current).length > 0;
-    scanFeedback(dup ? 'warn' : 'ok');
     setParsed(pass);
   }
 
@@ -114,22 +125,25 @@ export default function App() {
       <header className="topbar">
         <div className="topbar-row">
           <h1>
-            <Plane size={20} strokeWidth={2} aria-hidden="true" /> {t('appTitle')}
+            <span className="logo" aria-hidden="true">
+              <Plane size={18} strokeWidth={2.25} />
+            </span>
+            {t('appTitle')}
           </h1>
-          <div className="lang-switch" role="group" aria-label={t('language')}>
-            {LANGS.map((l) => (
-              <button key={l} className={lang === l ? 'active' : ''} aria-pressed={lang === l} onClick={() => setLang(l)}>
-                {l.toUpperCase()}
-              </button>
-            ))}
-          </div>
+          <Menu
+            label={t('language')}
+            icon={Languages}
+            items={LANGS.map((l) => ({ label: LANG_NAMES[l], icon: lang === l ? Check : null, onClick: () => setLang(l) }))}
+          />
         </div>
         <nav className="tabs">
-          <button className={tab === 'scan' ? 'active' : ''} onClick={() => setTab('scan')}>
-            {t('tabScan')}
+          <button className={tab === 'scan' ? 'active' : ''} aria-current={tab === 'scan' ? 'page' : undefined} onClick={() => setTab('scan')}>
+            <ScanBarcode size={20} aria-hidden="true" />
+            <span>{t('tabScan')}</span>
           </button>
-          <button className={tab === 'saved' ? 'active' : ''} onClick={() => setTab('saved')}>
-            {t('tabSaved')}
+          <button className={tab === 'saved' ? 'active' : ''} aria-current={tab === 'saved' ? 'page' : undefined} onClick={() => setTab('saved')}>
+            <Ticket size={20} aria-hidden="true" />
+            <span>{t('tabSaved')}</span>
             {saved.length > 0 && <span className="tab-count">{saved.length}</span>}
           </button>
         </nav>
@@ -166,13 +180,16 @@ export default function App() {
             {parsed && <TicketResult key={parsed.raw} parsed={parsed} saved={saved} onSaved={handleSaved} onCancel={reset} />}
           </>
         )}
-        {tab === 'saved' && <TicketList onToast={setToast} onChanged={setSaved} />}
+        {tab === 'saved' && <TicketList onToast={setToast} onChanged={setSaved} onGoScan={() => setTab('scan')} />}
       </main>
       <VersionFooter />
       <Toast toast={toast} onDone={hideToast} />
+      <ScanFlash flash={flash} onDone={hideFlash} />
     </div>
   );
 }
+
+const LANG_NAMES = { vi: 'Tiếng Việt', en: 'English' };
 
 const REPO_URL = 'https://github.com/TTomCCat/airline-scanner';
 

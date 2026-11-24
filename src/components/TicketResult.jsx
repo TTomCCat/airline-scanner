@@ -4,12 +4,7 @@ import TicketFields from './TicketFields.jsx';
 import { saveTicket } from '../lib/db.js';
 import { duplicatesOf, ticketsFromParsed } from '../lib/tickets.js';
 import { useT } from '../lib/i18n.js';
-
-const pad = (n) => String(n).padStart(2, '0');
-const shortTime = (ms) => {
-  const d = new Date(ms);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
-};
+import { shortTime } from '../lib/time.js';
 
 /**
  * Shows a scanned pass, lets the user add a note and save it without leaving the Scan tab.

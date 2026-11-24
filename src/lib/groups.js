@@ -80,7 +80,15 @@ export function matchesFor(candidate, tickets) {
     .filter((m) => m.seat || m.name);
 }
 
-export const EMPTY_FILTERS = { flight: '', seat: '', flightDate: '', name: '', savedFrom: '', savedTo: '', dupOnly: false };
+export const EMPTY_FILTERS = { q: '', flight: '', seat: '', flightDate: '', name: '', savedFrom: '', savedTo: '', dupOnly: false };
+
+/** Letters and digits only, for the quick search ("nguyen van" matches "NGUYEN/VAN A"). */
+const alnum = (s) => fold(s).replace(/[^a-z0-9]/g, '');
+
+/** Quick search: one box that matches name, seat, flight or booking ref. */
+function matchesQuery(t, q) {
+  return [t.name, t.seat, t.pnr].some((v) => alnum(v).includes(q)) || flightHaystack(t).includes(q);
+}
 
 export function hasFilters(f) {
   return Object.values(f).some((v) => v);
@@ -88,12 +96,14 @@ export function hasFilters(f) {
 
 /**
  * Filter tickets.
+ * q: quick search over name / seat / flight / PNR (letters and digits only).
  * flight / seat / name: substring, case-, accent- and space-insensitive.
  * flightDate: exact YYYY-MM-DD.
  * savedFrom / savedTo: `datetime-local` strings ("2026-11-21T08:00"), inclusive.
  * dupOnly: keep only tickets in `dups` (from findDuplicates over all tickets).
  */
 export function filterTickets(tickets, f, dups = findDuplicates(tickets)) {
+  const q = alnum(f.q);
   const flight = fold(f.flight);
   const seat = fold(f.seat);
   const name = fold(f.name);
@@ -103,6 +113,7 @@ export function filterTickets(tickets, f, dups = findDuplicates(tickets)) {
 
   return tickets.filter(
     (t) =>
+      (!q || matchesQuery(t, q)) &&
       (!flight || flightHaystack(t).includes(flight)) &&
       (!seat || fold(t.seat).includes(seat)) &&
       (!name || fold(t.name).includes(name)) &&

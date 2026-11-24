@@ -1,19 +1,31 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, ChevronDown, ChevronUp, CloudUpload, FileSpreadsheet, ListFilter, NotebookPen, Pencil, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, ChevronUp, CloudUpload, FileSpreadsheet, ListFilter, NotebookPen, Pencil, ScanBarcode, Search, Ticket, Trash2, X } from 'lucide-react';
 import { listTickets, deleteTicket, deleteTickets, deleteFlight, clearAll, flightKey, updateTicket, restoreTickets } from '../lib/db.js';
 import { groupByFlight, filterTickets, findDuplicates, hasFilters, EMPTY_FILTERS } from '../lib/groups.js';
 import { exportFlight, exportAll } from '../lib/exportXlsx.js';
 import { isConfigured as sheetsConfigured, loadGis, uploadToSheets } from '../lib/googleSheets.js';
 import GoogleAccountBar from './GoogleAccountBar.jsx';
+import Menu from './Menu.jsx';
 import { useT } from '../lib/i18n.js';
+import { relTime, shortTime, useNow } from '../lib/time.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 
-/** 08:05 21/11 */
-function shortTime(ms) {
-  const d = new Date(ms);
-  return `${pad(d.getHours())}:${pad(d.getMinutes())} ${pad(d.getDate())}/${pad(d.getMonth() + 1)}`;
+/** Today's date (local time) as YYYY-MM-DD. */
+function localToday() {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
+
+/** "NGUYEN/VAN A" → "NV" */
+function initials(name) {
+  const [last = '', first = ''] = String(name || '').split('/');
+  const a = last.trim()[0] || '';
+  const b = first.trim()[0] || last.trim()[1] || '';
+  return (a + b).toUpperCase() || '?';
+}
+
+const FRESH_MS = 15_000; // rows saved this recently slide in
 
 /** 2026-11-21 → 21/11/2026 */
 function dmy(iso) {
@@ -99,7 +111,7 @@ function PaxDetail({ tk, busy, onSave }) {
   );
 }
 
-export default function TicketList({ onToast = () => {}, onChanged = () => {} }) {
+export default function TicketList({ onToast = () => {}, onChanged = () => {}, onGoScan = () => {} }) {
   const { t } = useT();
   const [tickets, setTickets] = useState(null);
   const [error, setError] = useState('');
@@ -109,6 +121,7 @@ export default function TicketList({ onToast = () => {}, onChanged = () => {} })
   const [collapsed, setCollapsed] = useState(() => new Set()); // collapsed flight keys
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const now = useNow();
 
   async function load() {
     try {
@@ -229,13 +242,38 @@ export default function TicketList({ onToast = () => {}, onChanged = () => {} })
 
   if (!tickets) return <p className="muted">{t('loading')}</p>;
   if (error) return <p className="card error">{t('storageError', { msg: error })}</p>;
-  if (!tickets.length) return <p className="card muted">{t('empty')}</p>;
+  if (!tickets.length)
+    return (
+      <div className="card empty-state">
+        <Ticket size={40} strokeWidth={1.5} aria-hidden="true" />
+        <h2>{t('emptyTitle')}</h2>
+        <p className="muted">{t('emptyBody')}</p>
+        <button className="primary" onClick={onGoScan}>
+          <ScanBarcode size={16} /> {t('emptyCta')}
+        </button>
+      </div>
+    );
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
 
   return (
     <section>
       <div className="card filters">
+        <label className="search">
+          <Search size={18} aria-hidden="true" />
+          <input
+            type="search"
+            value={filters.q}
+            onChange={setF('q')}
+            placeholder={t('searchPlaceholder')}
+            aria-label={t('searchPlaceholder')}
+          />
+          {filters.q && (
+            <button className="icon-btn" onClick={() => setFilters({ ...filters, q: '' })} aria-label={t('clearSearch')}>
+              <X size={16} />
+            </button>
+          )}
+        </label>
         <div className="filters-head">
           <button className="link" onClick={() => setShowFilters(!showFilters)} aria-expanded={showFilters}>
             <ListFilter size={16} /> {t('filters')} {filtering ? t('filtering') : ''}
@@ -297,15 +335,19 @@ export default function TicketList({ onToast = () => {}, onChanged = () => {} })
           <button className="small-btn" disabled={busy || !shown.length} onClick={exportEverything}>
             <FileSpreadsheet size={16} /> {filtering ? t('exportFiltered') : t('exportAll')}
           </button>
-          {sheetsConfigured() && (
-            <button className="small-btn" disabled={busy || !shown.length} onClick={uploadEverything}>
-              {uploading ? <span className="spinner" aria-hidden="true" /> : <CloudUpload size={16} />}{' '}
-              {uploading ? t('gUploading') : filtering ? t('gUploadFiltered') : t('gUpload')}
-            </button>
+          {uploading && (
+            <span className="muted small with-icon">
+              <span className="spinner" aria-hidden="true" /> {t('gUploading')}
+            </span>
           )}
-          <button className="danger small-btn" disabled={busy || !shown.length} onClick={removeAll}>
-            <Trash2 size={16} /> {filtering ? t('deleteFiltered') : t('deleteAll')}
-          </button>
+          <Menu
+            label={t('moreActions')}
+            disabled={busy || !shown.length}
+            items={[
+              sheetsConfigured() && { label: filtering ? t('gUploadFiltered') : t('gUpload'), icon: CloudUpload, onClick: uploadEverything },
+              { label: filtering ? t('deleteFiltered') : t('deleteAll'), icon: Trash2, onClick: removeAll, danger: true },
+            ]}
+          />
         </div>
       </div>
 
@@ -316,34 +358,38 @@ export default function TicketList({ onToast = () => {}, onChanged = () => {} })
         const total = totalByFlight.get(g.key) || g.tickets.length;
         const partial = filtering && g.tickets.length !== total;
         const nDup = dupByFlight.get(g.key) || 0;
+        const status = g.flightDate === today ? 'today' : g.flightDate > today ? 'upcoming' : 'past';
+        const statusLabel = { today: t('statusToday'), upcoming: t('statusUpcoming'), past: t('statusPast') }[status];
         return (
-          <div key={g.key} className={`card group ${g.flightDate < today ? 'past' : ''}`}>
+          <div key={g.key} className={`card group ${status}`}>
             <div className="group-head">
               <button className="group-title" onClick={() => toggleGroup(g.key)} aria-expanded={!isCollapsed}>
-                <span className="group-flight">{g.flight || '—'}</span>
-                <span>{dmy(g.flightDate)}</span>
-                {g.from && (
-                  <span className="muted">
-                    {g.from}→{g.to}
-                  </span>
-                )}
-                <span className="badge">{partial ? `${g.tickets.length}/${total}` : t('nTickets', { n: total })}</span>
-                {nDup > 0 && (
-                  <span className="badge warn">
-                    <AlertTriangle size={12} aria-hidden="true" /> {t('nDup', { n: nDup })}
-                  </span>
-                )}
-                <span className="muted chevron">{isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}</span>
+                <span className="group-line">
+                  <span className="group-flight code-font">{g.flight || '—'}</span>
+                  <span className={`status-chip ${status}`}>{statusLabel}</span>
+                </span>
+                <span className="group-meta">
+                  {dmy(g.flightDate)}
+                  {g.from && ` · ${g.from} → ${g.to}`}
+                  {nDup > 0 && (
+                    <span className="badge warn">
+                      <AlertTriangle size={12} aria-hidden="true" /> {t('nDup', { n: nDup })}
+                    </span>
+                  )}
+                </span>
+                <span className="group-count">
+                  <strong>{partial ? `${g.tickets.length}/${total}` : total}</strong>
+                  <span className="chevron">{isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}</span>
+                </span>
               </button>
-              <div className="group-actions">
-                <button className="small-btn" disabled={busy} onClick={() => exportGroup(g)}>
-                  <FileSpreadsheet size={16} /> {t('exportExcel')}
-                  {partial ? t('exportPartial', { n: g.tickets.length }) : ''}
-                </button>
-                <button className="danger small-btn" disabled={busy} onClick={() => removeFlight(g)}>
-                  <Trash2 size={16} /> {t('deleteFlight')}
-                </button>
-              </div>
+              <Menu
+                label={t('flightActions', { flight: g.flight || '—' })}
+                disabled={busy}
+                items={[
+                  { label: t('exportExcel') + (partial ? t('exportPartial', { n: g.tickets.length }) : ''), icon: FileSpreadsheet, onClick: () => exportGroup(g) },
+                  { label: t('deleteFlight'), icon: Trash2, onClick: () => removeFlight(g), danger: true },
+                ]}
+              />
             </div>
 
             {!isCollapsed &&
@@ -351,18 +397,28 @@ export default function TicketList({ onToast = () => {}, onChanged = () => {} })
                 const dup = dups.get(tk.id);
                 const dupLabel = dup && [dup.seat && t('dupSeatMark'), dup.name && t('dupNameMark')].filter(Boolean).join(', ');
                 return (
-                <div key={tk.id} className={`pax ${open === tk.id ? 'open' : ''} ${dup ? 'dup' : ''}`}>
+                <div
+                  key={tk.id}
+                  className={`pax ${open === tk.id ? 'open' : ''} ${dup ? 'dup' : ''} ${now - tk.savedAt < FRESH_MS ? 'fresh' : ''}`}
+                >
                   <div className="pax-row">
                     <button className="pax-main" onClick={() => setOpen(open === tk.id ? null : tk.id)} aria-expanded={open === tk.id}>
-                      <span className={`pax-name ${dup?.name ? 'dup-field' : ''}`}>
-                        {dup && <AlertTriangle size={14} className="dup-mark" aria-label={dupLabel} title={dupLabel} />}
-                        {tk.name || '—'}
+                      <span className={`avatar ${dup ? 'warn' : ''}`} aria-hidden="true">
+                        {initials(tk.name)}
                       </span>
-                      <span className={`pax-seat ${dup?.seat ? 'dup-field' : ''}`}>{tk.seat || '—'}</span>
-                      <span className="pax-time">
-                        {tk.note && <NotebookPen size={14} className="note-mark" aria-label={t('hasNote')} />}
-                        {shortTime(tk.savedAt)}
+                      <span className="pax-info">
+                        <span className="pax-name">{tk.name || '—'}</span>
+                        <span className="pax-sub">
+                          <span title={shortTime(tk.savedAt)}>{relTime(tk.savedAt, now)}</span>
+                          {tk.note && <NotebookPen size={13} className="note-mark" aria-label={t('hasNote')} />}
+                          {dup && (
+                            <span className="badge warn mini">
+                              <AlertTriangle size={11} aria-hidden="true" /> {dupLabel}
+                            </span>
+                          )}
+                        </span>
                       </span>
+                      <span className={`seat-chip code-font ${dup?.seat ? 'warn' : ''}`}>{tk.seat || '—'}</span>
                     </button>
                     <button className="icon-btn" disabled={busy} onClick={() => removeTicket(tk)} aria-label={t('deleteTicket')}>
                       <Trash2 size={18} />

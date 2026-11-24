@@ -62,6 +62,15 @@ describe('filterTickets', () => {
     expect(ids({ savedTo: '2026-11-20T23:59' })).toEqual([4]);
   });
 
+  it('quick search matches name, seat or flight', () => {
+    const slash = [t({ id: 7, name: 'NGUYEN/VAN A', pnr: 'ABC123' })];
+    expect(filterTickets(slash, { ...EMPTY_FILTERS, q: 'nguyen van' }).map((x) => x.id)).toEqual([7]);
+    expect(filterTickets(slash, { ...EMPTY_FILTERS, q: 'abc123' }).map((x) => x.id)).toEqual([7]);
+    expect(ids({ q: '30f' })).toEqual([4]);
+    expect(ids({ q: 'Trần' })).toEqual([2]);
+    expect(ids({ q: 'vj120' })).toEqual([4]);
+  });
+
   it('combines filters', () => {
     expect(ids({ flight: 'VN 213', seat: 'B' })).toEqual([2]);
   });
