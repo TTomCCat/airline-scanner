@@ -1,7 +1,7 @@
 // Small "⋯" overflow menu. Closes on outside tap, Escape, or after picking an item.
-// items: [{ label, icon: LucideIcon, onClick, danger?, disabled? }]
+// items: [{ label, icon: LucideIcon, onClick, danger?, disabled?, checked? }] — `checked` marks the current choice
 import { useEffect, useId, useRef, useState } from 'react';
-import { MoreHorizontal } from 'lucide-react';
+import { Check, MoreHorizontal } from 'lucide-react';
 
 export default function Menu({ items, label, disabled, icon: Trigger = MoreHorizontal }) {
   const [open, setOpen] = useState(false);
@@ -39,10 +39,11 @@ export default function Menu({ items, label, disabled, icon: Trigger = MoreHoriz
       </button>
       {open && (
         <div className="menu-list" role="menu" id={id}>
-          {items.filter(Boolean).map(({ label: text, icon: Icon, onClick, danger, disabled: off }) => (
+          {items.filter(Boolean).map(({ label: text, icon: Icon, onClick, danger, disabled: off, checked }) => (
             <button
               key={text}
-              role="menuitem"
+              role={checked === undefined ? 'menuitem' : 'menuitemradio'}
+              aria-checked={checked}
               className={danger ? 'danger' : ''}
               disabled={off}
               onClick={() => {
@@ -52,6 +53,7 @@ export default function Menu({ items, label, disabled, icon: Trigger = MoreHoriz
             >
               <span className="menu-icon">{Icon && <Icon size={16} aria-hidden="true" />}</span>
               {text}
+              {checked && <Check size={16} className="menu-check" aria-hidden="true" />}
             </button>
           ))}
         </div>

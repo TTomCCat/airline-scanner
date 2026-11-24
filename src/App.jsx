@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Check, Languages, Plane, ScanBarcode, Ticket } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AlertTriangle, Languages, Moon, Plane, ScanBarcode, Sun, SunMoon, Ticket } from 'lucide-react';
 import Scanner from './components/Scanner.jsx';
 import TicketResult from './components/TicketResult.jsx';
 import TicketList from './components/TicketList.jsx';
@@ -10,7 +10,7 @@ import { parseBCBP } from './lib/bcbp.js';
 import { listTickets, saveTicket, flightKey } from './lib/db.js';
 import { findDuplicates } from './lib/groups.js';
 import { scanFeedback } from './lib/feedback.js';
-import { getSetting } from './lib/settings.js';
+import { getSetting, useSetting } from './lib/settings.js';
 import { currentFlight, duplicatesOf, ticketsFromParsed } from './lib/tickets.js';
 import { useKeyboardScanner } from './lib/keyboardScanner.js';
 import { useT, locale, LANGS } from './lib/i18n.js';
@@ -29,6 +29,11 @@ export default function App() {
   savedRef.current = saved;
   const hideToast = useCallback(() => setToast(null), []);
   const [flash, setFlash] = useState(null);
+  const [theme, setTheme] = useSetting('theme');
+  // Light / dark: 'auto' leaves it to the device (prefers-color-scheme), see index.css
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
   const hideFlash = useCallback(() => setFlash(null), []);
   const showFlash = (f) => setFlash({ ...f, id: Date.now() });
 
@@ -130,11 +135,23 @@ export default function App() {
             </span>
             {t('appTitle')}
           </h1>
-          <Menu
-            label={t('language')}
-            icon={Languages}
-            items={LANGS.map((l) => ({ label: LANG_NAMES[l], icon: lang === l ? Check : null, onClick: () => setLang(l) }))}
-          />
+          <div className="header-actions">
+            <Menu
+              label={t('theme')}
+              icon={THEME_ICONS[theme] || SunMoon}
+              items={['auto', 'light', 'dark'].map((v) => ({
+                label: t(`theme_${v}`),
+                icon: THEME_ICONS[v],
+                checked: theme === v,
+                onClick: () => setTheme(v),
+              }))}
+            />
+            <Menu
+              label={t('language')}
+              icon={Languages}
+              items={LANGS.map((l) => ({ label: LANG_NAMES[l], checked: lang === l, onClick: () => setLang(l) }))}
+            />
+          </div>
         </div>
         <nav className="tabs">
           <button className={tab === 'scan' ? 'active' : ''} aria-current={tab === 'scan' ? 'page' : undefined} onClick={() => setTab('scan')}>
@@ -190,6 +207,7 @@ export default function App() {
 }
 
 const LANG_NAMES = { vi: 'Tiếng Việt', en: 'English' };
+const THEME_ICONS = { auto: SunMoon, light: Sun, dark: Moon };
 
 const REPO_URL = 'https://github.com/TTomCCat/airline-scanner';
 

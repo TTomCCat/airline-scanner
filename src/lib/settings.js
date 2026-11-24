@@ -4,6 +4,7 @@ import { useSyncExternalStore } from 'react';
 const DEFAULTS = {
   sound: true, // beep after each scan
   keepScanning: false, // save every scan straight away, camera stays on
+  theme: 'auto', // 'auto' (follow the device) | 'light' | 'dark'
 };
 const PREFIX = 'setting:';
 const listeners = new Set();

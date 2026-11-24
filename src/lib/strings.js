@@ -25,6 +25,10 @@ export const STRINGS = {
     devBuild: 'bản dev',
     builtAt: 'build {date}',
     language: 'Ngôn ngữ',
+    theme: 'Giao diện sáng / tối',
+    theme_auto: 'Tự động (theo máy)',
+    theme_light: 'Sáng',
+    theme_dark: 'Tối',
 
     // Scanner
     scanTitle: 'Quét thẻ lên máy bay',
@@ -210,6 +214,10 @@ export const STRINGS = {
     devBuild: 'local dev',
     builtAt: 'built {date}',
     language: 'Language',
+    theme: 'Light / dark theme',
+    theme_auto: 'Auto (match device)',
+    theme_light: 'Light',
+    theme_dark: 'Dark',
 
     scanTitle: 'Scan a boarding pass',
     startingCamera: 'Starting camera…',
