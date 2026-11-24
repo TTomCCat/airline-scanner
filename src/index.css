@@ -333,7 +333,9 @@ textarea { font-family: var(--font-code); font-size: 0.85rem; }
 .group.today { --status: var(--ok); }
 .group.upcoming { --status: var(--brand); }
 .group.past { --status: var(--line); }
-.group.past .group-head, .group.past .pax { opacity: 0.72; }
+/* Dim the header's contents, not the header itself: opacity on the header would also fade its ⋯ menu
+   and trap it underneath the passenger rows */
+.group.past .group-head > :not(.menu), .group.past .pax { opacity: 0.72; }
 .group-head { display: flex; align-items: center; gap: 4px; padding: 6px 4px 6px 12px; border-bottom: 1px solid var(--line); }
 .group-title {
   flex: 1; min-width: 0; border: none; padding: 6px 0; background: none; text-align: left;
