@@ -5,7 +5,7 @@ import { useT, locale } from '../lib/i18n.js';
 function formatDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso + 'T00:00:00');
-  return d.toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+  return d.toLocaleDateString(locale(), { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function Field({ label, value, big, code }) {

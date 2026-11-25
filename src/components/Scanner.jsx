@@ -213,13 +213,13 @@ export default function Scanner({ onText }) {
             // Enter submits (a USB scanner typing here ends with Enter); Shift+Enter = new line
             if (e.key === 'Enter' && !e.shiftKey && pasted.trim()) {
               e.preventDefault();
-              onText(pasted);
+              onText(pasted, { manual: true });
               setPasted('');
             }
           }}
           placeholder="M1DOE/JOHN MR         EABC123 SGNKULMH 0759 322Y026D0010 100"
         />
-        <button disabled={!pasted.trim()} onClick={() => onText(pasted)}>
+        <button disabled={!pasted.trim()} onClick={() => onText(pasted, { manual: true })}>
           {t('readText')}
         </button>
       </details>

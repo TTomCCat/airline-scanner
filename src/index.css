@@ -218,7 +218,8 @@ textarea { font-family: var(--font-code); font-size: 0.85rem; }
 }
 .viewfinder:hover .vf-icon { transform: scale(1.06); }
 .vf-title { font-weight: 700; font-size: 1.05rem; }
-.vf-sub { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; color: #a7b3c2; padding: 0 16px; }
+/* side padding keeps the hint clear of the corner brackets (18px in from each edge) */
+.vf-sub { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 0.82rem; color: #a7b3c2; padding: 0 32px; }
 
 .video-wrap { position: relative; border-radius: 14px; overflow: hidden; background: #000; }
 .video-wrap video { width: 100%; display: block; }
@@ -295,7 +296,9 @@ textarea { font-family: var(--font-code); font-size: 0.85rem; }
 }
 .ticket-tear::before { left: -28px; }
 .ticket-tear::after { right: -28px; }
-.ticket-stub { display: grid; grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 8px 16px; align-items: end; padding: 14px 16px 16px; }
+.ticket-stub { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: flex-end; padding: 14px 16px 16px; }
+.ticket-stub .field { flex: 1 1 auto; }
+.ticket-stub .label { white-space: nowrap; }
 .stub-seat { display: flex; flex-direction: column; padding-right: 8px; }
 .stub-seat .code-font { font-size: 2.4rem; font-weight: 800; line-height: 1; color: var(--brand); }
 .notes { margin: 0; padding: 0 16px 14px; font-style: italic; color: var(--muted); }
@@ -380,7 +383,10 @@ textarea { font-family: var(--font-code); font-size: 0.85rem; }
 }
 .avatar.warn { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
 .pax-info { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
-.pax-name { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pax-name {
+  font-weight: 650; overflow: hidden; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2;
+}
 .pax-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--muted); }
 .note-mark { color: var(--accent); }
 .seat-chip {
@@ -457,3 +463,8 @@ textarea { font-family: var(--font-code); font-size: 0.85rem; }
 .update-bar > svg { color: var(--brand); }
 .update-bar > span { flex: 1; min-width: 140px; font-weight: 600; }
 .install-btn { margin-right: 4px; }
+
+/* iPhone Safari zooms the page when a focused field's text is under 16px, and stays zoomed */
+@media (pointer: coarse) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']), textarea, select { font-size: max(16px, 1em); }
+}

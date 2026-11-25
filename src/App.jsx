@@ -8,7 +8,7 @@ import ScanFlash from './components/ScanFlash.jsx';
 import Menu from './components/Menu.jsx';
 import UpdateBar from './components/UpdateBar.jsx';
 import { promptInstall, useCanInstall } from './lib/install.js';
-import { parseBCBP } from './lib/bcbp.js';
+import { parseBCBP, BcbpError } from './lib/bcbp.js';
 import { listTickets, saveTicket, flightKey } from './lib/db.js';
 import { findDuplicates } from './lib/groups.js';
 import { scanFeedback } from './lib/feedback.js';
@@ -73,12 +73,13 @@ export default function App() {
     }
   }
 
-  function handleText(text) {
+  /** `manual`: typed or pasted into the box, so the person is already looking at the error card below. */
+  function handleText(text, { manual = false } = {}) {
     // Boarding pass barcodes are plain ASCII. Accented letters (â, ơ, đ…) mean a
     // Vietnamese input method changed what a USB scanner typed — even if it still parses.
     if (/[^\x00-\x7F]/.test(text)) {
       scanFeedback('err');
-      showFlash({ kind: 'err', text: t('flashKeyboard') });
+      if (!manual) showFlash({ kind: 'err', text: t('flashKeyboard') });
       setParsed(null);
       setError({ key: 'imeChanged', raw: text });
       return;
@@ -88,9 +89,10 @@ export default function App() {
       pass = parseBCBP(text);
     } catch (e) {
       scanFeedback('err');
-      showFlash({ kind: 'err', text: t('flashUnreadable') });
+      if (!manual) showFlash({ kind: 'err', text: t('flashUnreadable') });
       setParsed(null);
-      setError({ key: 'parseFailed', msg: e.message, raw: text });
+      // The parser's own messages are English; show a translated one for "not a boarding pass"
+      setError(e instanceof BcbpError ? { key: 'notBoardingPass', raw: text } : { key: 'parseFailed', msg: e.message, raw: text });
       return;
     }
     setError(null);
